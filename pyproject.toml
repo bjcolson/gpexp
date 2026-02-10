@@ -1,0 +1,21 @@
+[project]
+name = "gpexp"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "bjcolson", email = "bfcolson+git@gmail.com" }
+]
+requires-python = ">=3.10"
+dependencies = ["click", 
+
+
+
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project.scripts]
+gpexp = "gpexp:scripts.gpexp"
