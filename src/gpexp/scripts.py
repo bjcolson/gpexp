@@ -17,7 +17,7 @@ lg = logging.getLogger(__name__)
     "-s",
     "--scenario",
     default=None,
-    help="Scenario number to run, or 'list' to show scenarios.",
+    help="Scenario number or name to run, or 'list' to show scenarios.",
 )
 @click.option(
     "-o",
@@ -25,14 +25,28 @@ lg = logging.getLogger(__name__)
     multiple=True,
     help="Scenario option as key=value (repeatable).",
 )
-def gpexp(verbose, scenario, opt):
+@click.option(
+    "-f",
+    "--file",
+    "file",
+    type=click.Path(exists=True),
+    default=None,
+    help="Run commands from a scenario file.",
+)
+@click.option(
+    "-i",
+    "--interactive",
+    is_flag=True,
+    help="Interactive REPL.",
+)
+def gpexp(verbose, scenario, opt, file, interactive):
 
     logging.basicConfig(
         level=TRACE if verbose else PROTOCOL,
         format="%(levelname)-8s %(name)s: %(message)s",
     )
 
-    from gpexp.app.gp.session import SCENARIOS
+    from gpexp.app.gp.scenarios import SCENARIOS
 
     if scenario == "list":
         for i, (name, desc, _, opt_defs) in enumerate(SCENARIOS, 1):
@@ -42,12 +56,13 @@ def gpexp(verbose, scenario, opt):
                 click.echo(f"       -o {oname}={default_str:10s} {odesc} ({otype})")
         return
 
-    scenario_num = None
+    # Resolve scenario: try int first, then keep as name string
+    scenario_ref = None
     if scenario is not None:
         try:
-            scenario_num = int(scenario)
+            scenario_ref = int(scenario)
         except ValueError:
-            raise click.BadParameter(f"expected a number, got '{scenario}'", param_hint="'-s'")
+            scenario_ref = scenario
 
     opts = {}
     for item in opt:
@@ -57,4 +72,4 @@ def gpexp(verbose, scenario, opt):
         opts[k] = v
 
     from gpexp.app.main import main
-    main(scenario=scenario_num, opts=opts)
+    main(scenario=scenario_ref, opts=opts, file=file, interactive=interactive)

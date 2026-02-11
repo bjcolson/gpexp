@@ -1,0 +1,8 @@
+# put_delete_key.gps — authenticate, PUT KEY, then DELETE KEY
+read_card_data
+auth kvn=20
+read_key_info
+put_keys new_kvn=30
+read_key_info
+delete_keys kvn=30
+read_key_info

@@ -9,6 +9,11 @@ from gpexp.app import gp
 lg = logging.getLogger(__name__)
 
 
-def main(scenario: int | None = None, opts: dict | None = None):
+def main(
+    scenario: int | str | None = None,
+    opts: dict | None = None,
+    file: str | None = None,
+    interactive: bool = False,
+):
     lg.debug("gpexp v1")
-    gp.session(scenario=scenario, opts=opts)
+    gp.session(scenario=scenario, opts=opts, file=file, interactive=interactive)

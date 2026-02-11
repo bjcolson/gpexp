@@ -1,0 +1,7 @@
+# read_card.gps — probe, authenticate, and read card contents
+probe
+read_cplc
+read_card_data
+auth kvn=20
+list_contents
+display

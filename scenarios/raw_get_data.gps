@@ -1,0 +1,4 @@
+# raw_get_data.gps — authenticate and send raw GET DATA 0066 (card recognition)
+read_card_data
+auth kvn=20
+apdu apdu=80CA006600
