@@ -16,11 +16,23 @@ class APDU:
 
     def to_bytes(self) -> bytes:
         buf = bytearray([self.cla, self.ins, self.p1, self.p2])
-        if self.data:
-            buf.append(len(self.data))
-            buf.extend(self.data)
-        if self.le is not None:
-            buf.append(self.le)
+        extended = len(self.data) > 255 or (self.le is not None and self.le > 256)
+        if extended:
+            if self.data:
+                buf.append(0x00)
+                buf.extend(len(self.data).to_bytes(2, "big"))
+                buf.extend(self.data)
+            elif self.le is not None:
+                buf.append(0x00)
+            if self.le is not None:
+                le = 0x0000 if self.le == 65536 else self.le
+                buf.extend(le.to_bytes(2, "big"))
+        else:
+            if self.data:
+                buf.append(len(self.data))
+                buf.extend(self.data)
+            if self.le is not None:
+                buf.append(0x00 if self.le == 256 else self.le)
         return bytes(buf)
 
     def __repr__(self) -> str:
