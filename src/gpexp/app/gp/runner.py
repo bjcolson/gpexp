@@ -130,15 +130,25 @@ class Runner:
         self._info.fci = result.fci
         return True
 
-    def cmd_select(self, *, aid: str = "") -> bool:
-        """SELECT an application by AID."""
-        result = self._terminal.send(SelectMessage(aid=bytes.fromhex(aid)))
+    def cmd_select(self, *, aid: str = "", fid: str = "", p1: str = "", p2: str = "") -> bool:
+        """SELECT by AID, DF name, or EF file identifier."""
+        if fid:
+            data = bytes.fromhex(fid)
+            sel_p1 = int(p1, 16) if p1 else 0x02
+            sel_p2 = int(p2, 16) if p2 else 0x0C
+            label = f"FID {fid.upper()}"
+        else:
+            data = bytes.fromhex(aid)
+            sel_p1 = int(p1, 16) if p1 else 0x04
+            sel_p2 = int(p2, 16) if p2 else 0x00
+            label = aid.upper() or "(default)"
+        result = self._terminal.send(SelectMessage(aid=data, p1=sel_p1, p2=sel_p2))
         if result.fci:
             self._info.fci = result.fci
         if (result.sw >> 8) != 0x90:
-            lg.error("SELECT failed: SW=%04X", result.sw)
+            lg.error("SELECT %s failed: SW=%04X", label, result.sw)
             return False
-        lg.info("SELECT %s SW=%04X", aid.upper() or "(default)", result.sw)
+        lg.info("SELECT %s SW=%04X", label, result.sw)
         return True
 
     def cmd_put_data(self, *, tag: str, data: str = "") -> bool:
@@ -153,16 +163,18 @@ class Runner:
         lg.error("PUT DATA %04X failed: SW=%04X", tag_int, result.sw)
         return False
 
-    def cmd_update_binary(self, *, offset: str = "0", data: str = "") -> bool:
-        """UPDATE BINARY — write to the currently selected transparent EF."""
+    def cmd_update_binary(self, *, offset: str = "0", data: str = "", sfi: str = "") -> bool:
+        """UPDATE BINARY — write to a transparent EF (by offset or SFI)."""
         offset_int = int(offset, 16)
+        sfi_int = int(sfi, 16) if sfi else None
         result = self._terminal.send(
-            UpdateBinaryMessage(offset=offset_int, data=bytes.fromhex(data))
+            UpdateBinaryMessage(offset=offset_int, data=bytes.fromhex(data), sfi=sfi_int)
         )
+        label = f"SFI={sfi_int:02X}" if sfi_int is not None else f"offset={offset_int:04X}"
         if result.success:
-            lg.info("UPDATE BINARY offset=%04X success", offset_int)
+            lg.info("UPDATE BINARY %s success", label)
             return True
-        lg.error("UPDATE BINARY offset=%04X failed: SW=%04X", offset_int, result.sw)
+        lg.error("UPDATE BINARY %s failed: SW=%04X", label, result.sw)
         return False
 
     def cmd_read_cplc(self) -> bool:

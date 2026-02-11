@@ -20,9 +20,11 @@ class ProbeResult(Result):
 
 @dataclass
 class SelectMessage(Message):
-    """SELECT an application by AID."""
+    """SELECT by AID (04), DF name (04 0C), or EF file identifier (02 0C)."""
 
     aid: bytes
+    p1: int = 0x04
+    p2: int = 0x00
 
 
 @dataclass
@@ -51,6 +53,7 @@ class UpdateBinaryMessage(Message):
 
     offset: int
     data: bytes
+    sfi: int | None = None
 
 
 @dataclass

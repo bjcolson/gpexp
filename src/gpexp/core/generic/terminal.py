@@ -40,8 +40,8 @@ class GenericTerminal(Terminal):
 
     @handles(SelectMessage)
     def _select(self, message: SelectMessage) -> SelectResult:
-        resp = self._iso.send_select(message.aid)
-        fci = parse_tlv(resp.data) if resp.success else []
+        resp = self._iso.send_select(message.aid, message.p1, message.p2)
+        fci = parse_tlv(resp.data) if resp.data else []
         return SelectResult(fci=fci, sw=resp.sw)
 
     @handles(PutDataMessage)
@@ -51,7 +51,7 @@ class GenericTerminal(Terminal):
 
     @handles(UpdateBinaryMessage)
     def _update_binary(self, message: UpdateBinaryMessage) -> UpdateBinaryResult:
-        resp = self._iso.send_update_binary(message.offset, message.data)
+        resp = self._iso.send_update_binary(message.offset, message.data, sfi=message.sfi)
         return UpdateBinaryResult(success=resp.success, sw=resp.sw)
 
     @handles(RawAPDUMessage)

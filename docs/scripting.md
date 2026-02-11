@@ -26,6 +26,8 @@ Commands map directly to `cmd_*` methods on the `Runner` class. The `cmd_` prefi
 |---------|-----------|-------------|
 | `probe` | — | Probe card: UID, ATR, FCI |
 | `select` | `aid` | SELECT an application by AID |
+| `put_data` | `tag` (required), `data` | PUT DATA — store a data object by tag (simple TLV) |
+| `update_binary` | `offset`, `data` | UPDATE BINARY — write to the currently selected transparent EF |
 | `read_cplc` | — | Read CPLC data |
 | `read_card_data` | — | Read GP data objects (key info, card recognition, IIN, CIN, sequence counter) |
 | `auth` | `kvn`, `level` | Authenticate with default keys |
@@ -80,7 +82,7 @@ Execution stops on the first error by default. Override with `set stop_on_error=
 
 Parameters are parsed differently depending on the command and parameter name:
 
-1. **Raw commands** (`apdu`, `select`) — all parameters are passed as raw strings with no conversion.
+1. **Raw commands** (`apdu`, `put_data`, `select`, `update_binary`) — all parameters are passed as raw hex strings with no conversion.
 
 2. **Hex parameters** (`kvn`, `new_kvn`, `key_type`, `key_length`, `level`) — always parsed as hexadecimal, so `kvn=20` means `0x20` (decimal 32).
 
@@ -156,6 +158,33 @@ set stop_on_error=false
 |---------|------|---------|-------------|
 | `key` | hex string | `404142434445464748494A4B4C4D4E4F` | Session key material (replicated across ENC/MAC/DEK) |
 | `stop_on_error` | bool | `true` | Stop file execution on first error |
+
+## The `put_data` command
+
+Store a data object on the card by tag (ISO 7816-4 PUT DATA, simple TLV, INS `DA`). The tag maps to P1-P2, Lc is derived from the data length.
+
+```
+put_data tag=2002 data=A0A1A2A3
+```
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `tag` | yes | Tag identifier (hex, 2 bytes in P1-P2) |
+| `data` | no | Data object value (hex) |
+
+## The `update_binary` command
+
+Write data to the currently selected transparent EF (ISO 7816-4 UPDATE BINARY, INS `D6`). The offset maps to P1-P2, Lc is derived from the data length.
+
+```
+update_binary data=A0A1A2A3
+update_binary offset=20 data=A0A1A2A3
+```
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `offset` | `0` | Write offset in the file (hex) |
+| `data` | `""` | Data to write (hex) |
 
 ## The `apdu` command
 
