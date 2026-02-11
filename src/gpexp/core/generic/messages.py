@@ -19,6 +19,19 @@ class ProbeResult(Result):
 
 
 @dataclass
+class SelectMessage(Message):
+    """SELECT an application by AID."""
+
+    aid: bytes
+
+
+@dataclass
+class SelectResult(Result):
+    fci: list[TLV]
+    sw: int
+
+
+@dataclass
 class RawAPDUMessage(Message):
     """Send a raw APDU to the card."""
 

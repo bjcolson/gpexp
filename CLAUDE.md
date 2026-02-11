@@ -23,20 +23,33 @@ Protocol methods that map directly to APDU commands use a `send_` prefix (e.g. `
 
 SCP02 and SCP03 are both supported. The `_authenticate` handler selects the appropriate protocol based on the SCP identifier in the INITIALIZE UPDATE response. Session state (keys, IVs, MAC chaining) is managed by `SCP02Channel` or `SCP03Channel`, held on the agent. The agent's `transmit()` delegates to `channel.wrap(apdu)` / `channel.unwrap(response)` when a session is active, passing through unchanged otherwise. The channel is created during INITIALIZE UPDATE + EXTERNAL AUTHENTICATE. Static keys are provided by the app layer via an `AuthenticateMessage`.
 
+## Runner
+
+`Runner` (`src/gpexp/app/gp/runner.py`) holds session state (terminal, CardInfo, key material) and exposes unit operations as `cmd_*` methods. Methods are auto-discovered and registered as commands available in the REPL, scenario files, and Python scenarios.
+
+Parameter values that map to APDU fields or tags (listed in `Runner._hex_params`) are always parsed as hex. Commands listed in `Runner._raw_commands` receive all parameters as raw strings.
+
 ## Running
 
 ```bash
-uv run gpexp              # default scenario (read_card)
-uv run gpexp -s list      # list available scenarios and options
-uv run gpexp -s 2         # run scenario by number
-uv run gpexp -s 2 -o kvn=20  # run scenario with options
-uv run gpexp -v           # TRACE-level logging (raw APDUs)
+uv run gpexp                          # default scenario (read_card)
+uv run gpexp -s list                  # list available scenarios and options
+uv run gpexp -s read_card             # run scenario by name
+uv run gpexp -s 2                     # run scenario by number
+uv run gpexp -s 2 -o kvn=20          # run scenario with options
+uv run gpexp -f scenarios/read_card.gps  # run commands from a file
+uv run gpexp -i                       # interactive REPL
+uv run gpexp -v                       # TRACE-level logging (raw APDUs)
 ```
 
 CLI entry point defined in `src/gpexp/scripts.py`, calls `src/gpexp/app/main.py:main()`.
 
 ## Scenarios
 
-Scenarios live in `src/gpexp/app/gp/session.py` as unit operations composed from terminal messages. The `SCENARIOS` list registers them for CLI access. Each entry is a 4-tuple: `(name, description, callable, option_defs)`. The callable receives `(terminal, **opts)`. Option defs map option names to `(type, default, description)` where type is `"bool"`, `"hex"`, or `"int"`.
+Python scenarios live in `src/gpexp/app/gp/scenarios.py`. The `SCENARIOS` list registers them for CLI access. Each entry is a 4-tuple: `(name, description, callable, option_defs)`. The callable receives `(runner, **opts)`. Option defs map option names to `(type, default, description)` where type is `"bool"`, `"hex"`, or `"int"`.
 
-Adding a new scenario: define the function, then append an entry to `SCENARIOS`.
+Scenario files (`.gps`) live in `scenarios/`. One command per line, `#` comments, blank lines ignored. Stops on first error by default (`set stop_on_error=false` to override).
+
+## Adding commands
+
+See `docs/adding-commands.md` for how to add runner commands, terminal messages, and scenarios.

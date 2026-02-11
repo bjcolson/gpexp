@@ -3,6 +3,8 @@ from gpexp.core.generic.messages import (
     ProbeResult,
     RawAPDUMessage,
     RawAPDUResult,
+    SelectMessage,
+    SelectResult,
 )
 from gpexp.core.generic.terminal import GenericTerminal
 
@@ -12,4 +14,6 @@ __all__ = [
     "ProbeResult",
     "RawAPDUMessage",
     "RawAPDUResult",
+    "SelectMessage",
+    "SelectResult",
 ]

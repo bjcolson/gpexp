@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import logging
-import readline  # noqa: F401 — enables line editing in input()
+try:
+    import readline  # noqa: F401 — enables line editing in input()
+except ImportError:
+    pass
 import shlex
 
 from gpexp.app.gp.cardinfo import (
@@ -14,7 +17,7 @@ from gpexp.app.gp.cardinfo import (
     parse_status,
 )
 from gpexp.app.gp.display import format_card_info, format_key_info
-from gpexp.core.generic import ProbeMessage, RawAPDUMessage
+from gpexp.core.generic import ProbeMessage, RawAPDUMessage, SelectMessage
 from gpexp.core.gp import (
     C_MAC,
     AuthenticateMessage,
@@ -121,6 +124,17 @@ class Runner:
         self._info.uid = result.uid
         self._info.atr = result.atr
         self._info.fci = result.fci
+        return True
+
+    def cmd_select(self, *, aid: str = "") -> bool:
+        """SELECT an application by AID."""
+        result = self._terminal.send(SelectMessage(aid=bytes.fromhex(aid)))
+        if result.fci:
+            self._info.fci = result.fci
+        if (result.sw >> 8) != 0x90:
+            lg.error("SELECT failed: SW=%04X", result.sw)
+            return False
+        lg.info("SELECT %s SW=%04X", aid.upper() or "(default)", result.sw)
         return True
 
     def cmd_read_cplc(self) -> bool:
@@ -274,7 +288,7 @@ class Runner:
         return True
 
     # Commands that receive raw string kwargs (no conversion at all).
-    _raw_commands: set[str] = {"apdu"}
+    _raw_commands: set[str] = {"apdu", "select"}
 
     # Parameter names that map to APDU fields or tags — always parsed as hex.
     _hex_params: set[str] = {

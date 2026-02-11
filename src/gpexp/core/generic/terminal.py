@@ -8,6 +8,8 @@ from gpexp.core.generic.messages import (
     ProbeResult,
     RawAPDUMessage,
     RawAPDUResult,
+    SelectMessage,
+    SelectResult,
 )
 from gpexp.core.smartcard import APDU
 from gpexp.core.smartcard.tlv import parse as parse_tlv
@@ -31,6 +33,12 @@ class GenericTerminal(Terminal):
             fci = parse_tlv(resp.data)
 
         return ProbeResult(uid=uid, atr=atr, fci=fci)
+
+    @handles(SelectMessage)
+    def _select(self, message: SelectMessage) -> SelectResult:
+        resp = self._iso.send_select(message.aid)
+        fci = parse_tlv(resp.data) if resp.success else []
+        return SelectResult(fci=fci, sw=resp.sw)
 
     @handles(RawAPDUMessage)
     def _raw_apdu(self, message: RawAPDUMessage) -> RawAPDUResult:
