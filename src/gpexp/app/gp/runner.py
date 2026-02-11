@@ -228,6 +228,16 @@ class Runner:
         lg.error("DELETE KEY failed: SW=%04X", result.sw)
         return False
 
+    def cmd_connect(self) -> bool:
+        """Connect to the card."""
+        self._terminal.connect()
+        return True
+
+    def cmd_disconnect(self) -> bool:
+        """Disconnect from the card."""
+        self._terminal.disconnect()
+        return True
+
     def cmd_reconnect(self) -> bool:
         """Disconnect and reconnect the card."""
         self._terminal.disconnect()
