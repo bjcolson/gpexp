@@ -3,16 +3,12 @@
 
 
 import logging
-import os
-import sys
-from pathlib import Path
+
+from gpexp.app import gp
 
 lg = logging.getLogger(__name__)
-lg.setLevel(logging.DEBUG)
 
 
-def main():
-    lg.debug("gpexp v1 ")
-
-if __name__ == "__main__":
-    logging.basicConfig(level=logging.DEBUG)
+def main(scenario: int | None = None, opts: dict | None = None):
+    lg.debug("gpexp v1")
+    gp.session(scenario=scenario, opts=opts)
