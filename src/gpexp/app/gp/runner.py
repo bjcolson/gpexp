@@ -72,8 +72,8 @@ def parse_command(line: str) -> tuple[str, dict[str, str]] | None:
     Returns None for blank/comment lines.  Values are kept as raw strings;
     the caller decides how to convert them.
     """
-    stripped = line.strip()
-    if not stripped or stripped.startswith("#"):
+    stripped = line.split("#", 1)[0].strip()
+    if not stripped:
         return None
     parts = shlex.split(stripped)
     name = parts[0]
