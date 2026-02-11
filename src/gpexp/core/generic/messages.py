@@ -48,6 +48,21 @@ class PutDataResult(Result):
 
 
 @dataclass
+class ReadBinaryMessage(Message):
+    """READ BINARY — read from a transparent EF."""
+
+    offset: int
+    length: int
+    sfi: int | None = None
+
+
+@dataclass
+class ReadBinaryResult(Result):
+    data: bytes
+    sw: int
+
+
+@dataclass
 class UpdateBinaryMessage(Message):
     """UPDATE BINARY — write to a transparent EF."""
 

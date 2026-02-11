@@ -21,6 +21,7 @@ from gpexp.core.generic import (
     ProbeMessage,
     PutDataMessage,
     RawAPDUMessage,
+    ReadBinaryMessage,
     SelectMessage,
     UpdateBinaryMessage,
 )
@@ -161,6 +162,21 @@ class Runner:
             lg.info("PUT DATA %04X success", tag_int)
             return True
         lg.error("PUT DATA %04X failed: SW=%04X", tag_int, result.sw)
+        return False
+
+    def cmd_read_binary(self, *, offset: str = "0", le: str = "0", sfi: str = "") -> bool:
+        """READ BINARY — read from a transparent EF (by offset or SFI)."""
+        offset_int = int(offset, 16)
+        le_int = int(le, 16)
+        sfi_int = int(sfi, 16) if sfi else None
+        result = self._terminal.send(
+            ReadBinaryMessage(offset=offset_int, length=le_int, sfi=sfi_int)
+        )
+        label = f"SFI={sfi_int:02X}" if sfi_int is not None else f"offset={offset_int:04X}"
+        if (result.sw >> 8) == 0x90:
+            lg.info("READ BINARY %s: %s", label, result.data.hex(" ").upper() if result.data else "")
+            return True
+        lg.error("READ BINARY %s failed: SW=%04X", label, result.sw)
         return False
 
     def cmd_update_binary(self, *, offset: str = "0", data: str = "", sfi: str = "") -> bool:
@@ -334,7 +350,7 @@ class Runner:
         return True
 
     # Commands that receive raw string kwargs (no conversion at all).
-    _raw_commands: set[str] = {"apdu", "put_data", "select", "update_binary"}
+    _raw_commands: set[str] = {"apdu", "put_data", "read_binary", "select", "update_binary"}
 
     # Parameter names that map to APDU fields or tags — always parsed as hex.
     _hex_params: set[str] = {

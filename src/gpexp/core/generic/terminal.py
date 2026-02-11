@@ -8,6 +8,8 @@ from gpexp.core.generic.messages import (
     ProbeResult,
     PutDataMessage,
     PutDataResult,
+    ReadBinaryMessage,
+    ReadBinaryResult,
     RawAPDUMessage,
     RawAPDUResult,
     SelectMessage,
@@ -48,6 +50,11 @@ class GenericTerminal(Terminal):
     def _put_data(self, message: PutDataMessage) -> PutDataResult:
         resp = self._iso.send_put_data(message.tag, message.data)
         return PutDataResult(success=resp.success, sw=resp.sw)
+
+    @handles(ReadBinaryMessage)
+    def _read_binary(self, message: ReadBinaryMessage) -> ReadBinaryResult:
+        resp = self._iso.send_read_binary(message.offset, message.length, sfi=message.sfi)
+        return ReadBinaryResult(data=resp.data, sw=resp.sw)
 
     @handles(UpdateBinaryMessage)
     def _update_binary(self, message: UpdateBinaryMessage) -> UpdateBinaryResult:
