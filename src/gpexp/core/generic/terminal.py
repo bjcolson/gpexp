@@ -6,10 +6,14 @@ from gpexp.core.base.terminal import handles
 from gpexp.core.generic.messages import (
     ProbeMessage,
     ProbeResult,
+    PutDataMessage,
+    PutDataResult,
     RawAPDUMessage,
     RawAPDUResult,
     SelectMessage,
     SelectResult,
+    UpdateBinaryMessage,
+    UpdateBinaryResult,
 )
 from gpexp.core.smartcard import APDU
 from gpexp.core.smartcard.tlv import parse as parse_tlv
@@ -39,6 +43,16 @@ class GenericTerminal(Terminal):
         resp = self._iso.send_select(message.aid)
         fci = parse_tlv(resp.data) if resp.success else []
         return SelectResult(fci=fci, sw=resp.sw)
+
+    @handles(PutDataMessage)
+    def _put_data(self, message: PutDataMessage) -> PutDataResult:
+        resp = self._iso.send_put_data(message.tag, message.data)
+        return PutDataResult(success=resp.success, sw=resp.sw)
+
+    @handles(UpdateBinaryMessage)
+    def _update_binary(self, message: UpdateBinaryMessage) -> UpdateBinaryResult:
+        resp = self._iso.send_update_binary(message.offset, message.data)
+        return UpdateBinaryResult(success=resp.success, sw=resp.sw)
 
     @handles(RawAPDUMessage)
     def _raw_apdu(self, message: RawAPDUMessage) -> RawAPDUResult:

@@ -17,7 +17,13 @@ from gpexp.app.gp.cardinfo import (
     parse_status,
 )
 from gpexp.app.gp.display import format_card_info, format_key_info
-from gpexp.core.generic import ProbeMessage, RawAPDUMessage, SelectMessage
+from gpexp.core.generic import (
+    ProbeMessage,
+    PutDataMessage,
+    RawAPDUMessage,
+    SelectMessage,
+    UpdateBinaryMessage,
+)
 from gpexp.core.gp import (
     C_MAC,
     AuthenticateMessage,
@@ -134,6 +140,30 @@ class Runner:
             return False
         lg.info("SELECT %s SW=%04X", aid.upper() or "(default)", result.sw)
         return True
+
+    def cmd_put_data(self, *, tag: str, data: str = "") -> bool:
+        """PUT DATA — store a data object by tag (simple TLV)."""
+        tag_int = int(tag, 16)
+        result = self._terminal.send(
+            PutDataMessage(tag=tag_int, data=bytes.fromhex(data))
+        )
+        if result.success:
+            lg.info("PUT DATA %04X success", tag_int)
+            return True
+        lg.error("PUT DATA %04X failed: SW=%04X", tag_int, result.sw)
+        return False
+
+    def cmd_update_binary(self, *, offset: str = "0", data: str = "") -> bool:
+        """UPDATE BINARY — write to the currently selected transparent EF."""
+        offset_int = int(offset, 16)
+        result = self._terminal.send(
+            UpdateBinaryMessage(offset=offset_int, data=bytes.fromhex(data))
+        )
+        if result.success:
+            lg.info("UPDATE BINARY offset=%04X success", offset_int)
+            return True
+        lg.error("UPDATE BINARY offset=%04X failed: SW=%04X", offset_int, result.sw)
+        return False
 
     def cmd_read_cplc(self) -> bool:
         """Read CPLC data."""
@@ -292,7 +322,7 @@ class Runner:
         return True
 
     # Commands that receive raw string kwargs (no conversion at all).
-    _raw_commands: set[str] = {"apdu", "select"}
+    _raw_commands: set[str] = {"apdu", "put_data", "select", "update_binary"}
 
     # Parameter names that map to APDU fields or tags — always parsed as hex.
     _hex_params: set[str] = {

@@ -32,6 +32,34 @@ class SelectResult(Result):
 
 
 @dataclass
+class PutDataMessage(Message):
+    """PUT DATA — store a data object by tag (simple TLV)."""
+
+    tag: int
+    data: bytes
+
+
+@dataclass
+class PutDataResult(Result):
+    success: bool
+    sw: int
+
+
+@dataclass
+class UpdateBinaryMessage(Message):
+    """UPDATE BINARY — write to a transparent EF."""
+
+    offset: int
+    data: bytes
+
+
+@dataclass
+class UpdateBinaryResult(Result):
+    success: bool
+    sw: int
+
+
+@dataclass
 class RawAPDUMessage(Message):
     """Send a raw APDU to the card."""
 

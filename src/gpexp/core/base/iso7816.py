@@ -45,3 +45,17 @@ class ISO7816:
         p2 = tag & 0xFF
         apdu = APDU(cla=0x00, ins=0xCA, p1=p1, p2=p2, le=0x00)
         return self._send(f"GET DATA {tag:04X}", apdu)
+
+    def send_put_data(self, tag: int, data: bytes) -> Response:
+        """Store a data object by tag, simple TLV (00 DA)."""
+        p1 = (tag >> 8) & 0xFF
+        p2 = tag & 0xFF
+        apdu = APDU(cla=0x00, ins=0xDA, p1=p1, p2=p2, data=data)
+        return self._send(f"PUT DATA {tag:04X}", apdu)
+
+    def send_update_binary(self, offset: int, data: bytes) -> Response:
+        """Update binary data in the currently selected file (00 D6)."""
+        p1 = (offset >> 8) & 0x7F
+        p2 = offset & 0xFF
+        apdu = APDU(cla=0x00, ins=0xD6, p1=p1, p2=p2, data=data)
+        return self._send(f"UPDATE BINARY offset={offset:04X} len={len(data):02X}", apdu)
