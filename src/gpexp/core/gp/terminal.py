@@ -133,6 +133,15 @@ class GPTerminal(GenericTerminal):
         ]:
             resp = self._gp.send_get_data(tag)
             results[key] = resp.data if resp.success else None
+
+        # Unwrap seq_counter: strip C1 TLV wrapper and convert to int
+        raw = results.get("seq_counter")
+        if raw is not None:
+            nodes = parse_tlv(raw)
+            if nodes and nodes[0].tag == 0xC1:
+                raw = nodes[0].value
+            results["seq_counter"] = int.from_bytes(raw, "big") if raw else None
+
         return GetCardDataResult(**results)
 
     @handles(ListContentsMessage)

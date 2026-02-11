@@ -41,7 +41,7 @@ class GetCardDataResult(Result):
     card_recognition: bytes | None
     iin: bytes | None
     cin: bytes | None
-    seq_counter: bytes | None
+    seq_counter: int | None
 
 
 @dataclass

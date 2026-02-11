@@ -29,8 +29,6 @@ from gpexp.core.gp import (
     PutKeyMessage,
     StaticKeys,
 )
-from gpexp.core.smartcard.tlv import parse as parse_tlv
-
 lg = logging.getLogger(__name__)
 
 GP_DEFAULT_KEY = bytes.fromhex("404142434445464748494A4B4C4D4E4F")
@@ -156,11 +154,7 @@ class Runner:
         if result.cin is not None:
             self._info.cin = result.cin
         if result.seq_counter is not None:
-            raw = result.seq_counter
-            nodes = parse_tlv(raw)
-            if nodes and nodes[0].tag == 0xC1:
-                raw = nodes[0].value
-            self._info.seq_counter = int.from_bytes(raw, "big") if raw else None
+            self._info.seq_counter = result.seq_counter
         return True
 
     def cmd_auth(self, *, kvn: int = 0x00, level: int = C_MAC) -> bool:
