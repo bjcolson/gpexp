@@ -176,7 +176,7 @@ class SCP03Channel:
 
     def wrap(self, apdu: APDU) -> APDU:
         """Apply C-MAC (and optionally C-DECRYPTION) to an outgoing command."""
-        if not (self._security_level & C_MAC):
+        if not (self._security_level & C_MAC) and apdu.ins != 0x82:
             return apdu
 
         data = apdu.data
