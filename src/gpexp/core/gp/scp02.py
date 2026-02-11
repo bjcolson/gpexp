@@ -6,7 +6,7 @@ from cryptography.hazmat.decrepit.ciphers.algorithms import TripleDES
 from cryptography.hazmat.primitives.ciphers import Cipher, modes
 
 from gpexp.core.gp.padding import pad80
-from gpexp.core.gp.security import C_DECRYPTION, R_MAC, SessionSetup, StaticKeys
+from gpexp.core.gp.security import C_DECRYPTION, C_MAC, R_MAC, SessionSetup, StaticKeys
 from gpexp.core.smartcard.types import APDU, Response
 
 # Key derivation constants
@@ -223,6 +223,9 @@ class SCP02Channel:
 
     def wrap(self, apdu: APDU) -> APDU:
         """Apply C-MAC (and optionally C-DECRYPTION) to an outgoing command."""
+        if not (self._security_level & C_MAC):
+            return apdu
+
         data = apdu.data
 
         # Encrypt command data if required (skip EXTERNAL AUTHENTICATE)

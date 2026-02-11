@@ -163,11 +163,11 @@ class Runner:
             self._info.seq_counter = int.from_bytes(raw, "big") if raw else None
         return True
 
-    def cmd_auth(self, *, kvn: int = 0x00) -> bool:
-        """Authenticate with default keys at a KVN."""
+    def cmd_auth(self, *, kvn: int = 0x00, level: int = C_MAC) -> bool:
+        """Authenticate with default keys (kvn=KVN, level=SECURITY_LEVEL)."""
         keys = self._derive_key(kvn)
         result = self._terminal.send(
-            AuthenticateMessage(keys=keys, security_level=C_MAC, key_version=kvn)
+            AuthenticateMessage(keys=keys, security_level=level, key_version=kvn)
         )
         if not result.authenticated:
             lg.error(
@@ -302,7 +302,7 @@ class Runner:
 
     # Parameter names that map to APDU fields or tags — always parsed as hex.
     _hex_params: set[str] = {
-        "kvn", "new_kvn", "key_type", "key_length",
+        "kvn", "new_kvn", "key_type", "key_length", "level",
     }
 
     # --- Execution ---
