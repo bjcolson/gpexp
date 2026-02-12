@@ -76,6 +76,7 @@ class Runner:
         self._raw_commands: set[str] = set()
         self._hex_params: set[str] = set()
         self._settings: dict[str, callable] = {
+            "log": self._set_log,
             "stop_on_error": self._set_stop_on_error,
         }
         for mod in command_modules:
@@ -101,6 +102,14 @@ class Runner:
         self._raw_commands.add("set")
 
     # --- Settings ---
+
+    def _set_log(self, _runner, value: str) -> None:
+        level = logging.getLevelName(value.upper())
+        if not isinstance(level, int):
+            lg.warning("unknown log level: %s", value)
+            return
+        logging.getLogger().setLevel(level)
+        lg.info("log = %s", value.upper())
 
     def _set_stop_on_error(self, _runner, value: str) -> None:
         self._stop_on_error = value.lower() in ("true", "yes", "1")

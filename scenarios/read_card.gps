@@ -1,6 +1,9 @@
 # read_card.gps — probe, authenticate, and read card contents
+
+set log=TRACE
 probe display=true
 info_cplc display=true
 info_card_data display=true
-auth kvn=20
+set log=PROTOCOL
+auth kvn=00
 info_contents display=true
