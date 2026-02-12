@@ -78,6 +78,20 @@ class DeleteKeyResult(Result):
 
 
 @dataclass
+class DeleteMessage(Message):
+    """Request to DELETE card content (package or applet) by AID."""
+
+    aid: bytes
+    related: bool = False
+
+
+@dataclass
+class DeleteResult(Result):
+    success: bool
+    sw: int
+
+
+@dataclass
 class PutKeyMessage(Message):
     """Request to PUT KEY — load a new key set onto the card."""
 

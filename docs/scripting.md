@@ -52,6 +52,7 @@ Each command sends a single APDU.
 | `load` | `file` (required), `aid`, `sd`, `block_size` | Load a CAP/IJC file onto the card |
 | `install` | `package` (required), `module`, `instance`, `privileges`, `params`, `selectable` | Install an applet from a loaded package |
 | `put_keys` | `new_kvn`, `key_type`, `key_length` | Load a new key set |
+| `delete` | `aid` (required), `related` | Delete a package or applet instance by AID |
 | `delete_keys` | `kvn` (required) | Delete a key set by version number |
 
 **Info commands** — collect data into runner state, accept `display=true`:
@@ -96,6 +97,7 @@ All commands return `True` on success, `False` on error.
 | `block_size` | `239` | LOAD block size in bytes (decimal) |
 | `privileges` | `00` | Application privileges (hex) |
 | `params` | `C900` | Install parameters TLV (hex, `C900` = empty) |
+| `related` | `false` | Delete related objects (cascade) |
 | `selectable` | `true` | Make applet selectable on install |
 
 ## Scenario files (.gps)
@@ -123,7 +125,7 @@ Execution stops on the first error by default. Override with `set stop_on_error=
 
 Parameters are parsed differently depending on the command and parameter name:
 
-1. **Raw commands** (`apdu`, `put_data`, `read_binary`, `select`, `update_binary`, `load`, `install`) — all parameters are passed as raw strings with no conversion.
+1. **Raw commands** (`apdu`, `put_data`, `read_binary`, `select`, `update_binary`, `load`, `install`, `delete`) — all parameters are passed as raw strings with no conversion.
 
 2. **Hex parameters** (`kvn`, `new_kvn`, `key_type`, `key_length`, `level`) — always parsed as hexadecimal, so `kvn=20` means `0x20` (decimal 32).
 
@@ -324,4 +326,18 @@ install package=A00000006203010C08 module=A00000006203010C0801 selectable=false
 | `privileges` | `00` | Application privileges (hex) |
 | `params` | `C900` | Install parameters TLV (hex) — `C900` = empty |
 | `selectable` | `true` | Make the applet selectable (P1=`0C`); `false` uses P1=`04` |
+
+## The `delete` command
+
+Delete a package or applet instance from the card. Sends DELETE (`80 E4`) with tag `4F` containing the AID. Requires an authenticated session.
+
+```
+delete aid=A00000006203010C0801
+delete aid=A00000006203010C08 related=true
+```
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `aid` | (required) | AID of the object to delete (hex) |
+| `related` | `false` | Delete related objects — set `true` to cascade-delete a package and its instances (P2=`80`) |
 

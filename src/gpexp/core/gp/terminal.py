@@ -13,6 +13,8 @@ from gpexp.core.gp.messages import (
     AuthenticateResult,
     DeleteKeyMessage,
     DeleteKeyResult,
+    DeleteMessage,
+    DeleteResult,
     GetCardDataMessage,
     GetCardDataResult,
     GetCPLCMessage,
@@ -233,6 +235,11 @@ class GPTerminal(GenericTerminal):
     def _delete_key(self, message: DeleteKeyMessage) -> DeleteKeyResult:
         resp = self._gp.send_delete_key(message.key_version)
         return DeleteKeyResult(success=resp.success, sw=resp.sw)
+
+    @handles(DeleteMessage)
+    def _delete(self, message: DeleteMessage) -> DeleteResult:
+        resp = self._gp.send_delete(message.aid, message.related)
+        return DeleteResult(success=resp.success, sw=resp.sw)
 
     @handles(LoadMessage)
     def _load(self, message: LoadMessage) -> LoadResult:

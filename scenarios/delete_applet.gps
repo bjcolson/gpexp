@@ -1,0 +1,12 @@
+# delete_applet.gps — delete HelloWorldApplet instance and package
+probe
+info_card_data
+auth
+info_contents display=true
+
+# delete the applet instance
+delete aid=D000CAFE000101
+
+# delete the package (with related=true in case other instances remain)
+delete aid=D000CAFE0001 related=true
+info_contents display=true

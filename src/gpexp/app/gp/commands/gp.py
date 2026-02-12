@@ -20,6 +20,7 @@ from gpexp.core.gp import (
     C_MAC,
     AuthenticateMessage,
     DeleteKeyMessage,
+    DeleteMessage,
     GetCardDataMessage,
     GetCPLCMessage,
     InstallMessage,
@@ -33,7 +34,7 @@ from gpexp.core.gp.capfile import read_load_file
 lg = logging.getLogger(__name__)
 
 # Commands that receive raw string kwargs (no conversion).
-_raw_commands: set[str] = {"load", "install"}
+_raw_commands: set[str] = {"load", "install", "delete"}
 
 # Parameter names always parsed as hex.
 _hex_params: set[str] = {"kvn", "new_kvn", "key_type", "key_length", "level"}
@@ -157,6 +158,18 @@ def cmd_delete_keys(runner, *, kvn: int) -> bool:
         lg.info("DELETE KEY success: removed KVN %02X", kvn)
         return True
     lg.error("DELETE KEY failed: SW=%04X", result.sw)
+    return False
+
+
+def cmd_delete(runner, *, aid: str, related: str = "false") -> bool:
+    """Delete a package or applet instance by AID."""
+    aid_bytes = bytes.fromhex(aid)
+    cascade = related.lower() in ("true", "yes", "1")
+    result = runner._terminal.send(DeleteMessage(aid=aid_bytes, related=cascade))
+    if result.success:
+        lg.info("DELETE success: %s", aid_bytes.hex().upper())
+        return True
+    lg.error("DELETE failed: SW=%04X", result.sw)
     return False
 
 

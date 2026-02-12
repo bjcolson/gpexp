@@ -6,19 +6,19 @@ import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
-# GP 2.2 Table 6-2: component load order.
+# Component load order matching GlobalPlatformPro.
+# Descriptor and Debug are excluded — they are for off-card use only and
+# many cards reject them during LOAD.
 _CAP_COMPONENTS = [
     "Header",
     "Directory",
-    "Applet",
     "Import",
-    "ConstantPool",
+    "Applet",
     "Class",
     "Method",
     "StaticField",
+    "ConstantPool",
     "RefLocation",
-    "Descriptor",
-    "Debug",
 ]
 
 
@@ -91,9 +91,9 @@ def _parse_metadata(data: bytes) -> tuple[bytes, list[bytes]]:
         comp_data = data[offset + 3 : offset + 3 + size]
         offset += 3 + size
 
-        if tag == 0x01 and len(comp_data) >= 6:
-            # Header: skip minor(1) major(1) flags(1) -> package info
-            p = 3
+        if tag == 0x01 and len(comp_data) >= 10:
+            # Header: skip magic(4) minor(1) major(1) flags(1) -> package info
+            p = 7
             # package info: minor(1) major(1) aid_length(1) aid(n)
             p += 2  # skip pkg minor, major
             aid_len = comp_data[p]

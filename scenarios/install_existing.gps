@@ -7,5 +7,5 @@ auth
 info_contents display=true
 
 # install a new instance from an existing package
-install package=A00000006203010C08 module=A00000006203010C0801 instance=A00000006203010C0802
+install package=A000000151000001 module=A00000015100000101 instance=A00000015100000102
 info_contents display=true

@@ -17,7 +17,7 @@ The app sends `Message` objects to the terminal via `send()` and receives typed 
 
 Messages and their typed results are defined in per-package `messages.py` files. Each result subclass carries its own fields instead of a generic dict. Protocol classes (`ISO7816`, `GP`) are standalone objects that receive `agent.transmit` as a callable — there is one `Agent` class, no subclasses. Terminals construct the protocol objects they need (e.g. `GenericTerminal` creates `self._iso`, `GPTerminal` adds `self._gp`). Terminals inherit handlers from parent classes, so GPTerminal extends GenericTerminal.
 
-Protocol methods that map directly to APDU commands use a `send_` prefix (e.g. `send_select`, `send_get_data`, `send_get_status`, `send_install`, `send_load`). Higher-level operations that compose multiple commands do not (e.g. `list_content`, `list_all_content`, `load_file`).
+Protocol methods that map directly to APDU commands use a `send_` prefix (e.g. `send_select`, `send_get_data`, `send_get_status`, `send_install`, `send_load`, `send_delete`). Higher-level operations that compose multiple commands do not (e.g. `list_content`, `list_all_content`, `load_file`).
 
 ## Secure Channel
 
@@ -34,7 +34,7 @@ Commands are `cmd_*` plain functions in modules split across two packages:
 - **`session.py`** — Session management and raw APDU (connect, disconnect, apdu)
 
 **GP** (`src/gpexp/app/gp/commands/`):
-- **`gp.py`** — GlobalPlatform commands (auth, load, install, info_contents, put_keys, etc.)
+- **`gp.py`** — GlobalPlatform commands (auth, load, install, delete, info_contents, put_keys, etc.)
 
 Each function takes `runner` as its first argument. `Runner.__init__` collects `cmd_*` functions from all modules listed in `commands.COMMAND_MODULES` via `functools.partial`. Each module declares `_raw_commands`, `_hex_params` sets and an optional `_settings` dict that Runner unions together. `GPRunner` combines generic and GP `COMMAND_MODULES`.
 
@@ -44,9 +44,11 @@ Parameter values that map to APDU fields or tags (listed in module-level `_hex_p
 
 Data-collecting commands (`probe`, `info_cplc`, `info_card_data`, `info_keys`, `info_contents`) accept `display=true` to print their results immediately after collection.
 
-## Loading applets
+## Loading and deleting applets
 
 The `load` command reads a CAP (ZIP) or IJC (raw binary) file via `capfile.read_load_file()`, then sends INSTALL [for load] + LOAD blocks. The `install` command sends INSTALL [for install and make selectable] and works independently — it can install from packages loaded in a prior session or by another tool. Both are raw commands (file paths and hex AIDs parsed manually).
+
+The `delete` command sends DELETE (`80 E4`) with tag `4F` (AID) to remove a package or applet instance. Use `related=true` to cascade-delete a package and all its instances. Also a raw command (hex AID parsed manually).
 
 ## Running
 

@@ -1,7 +1,21 @@
-# load_applet.gps — load a CAP file and install the applet
+# load_applet.gps — load HelloWorldApplet, install, and test
 probe
 info_card_data
 auth
-load file=applets/MyApplet.cap
-install package=A00000006203010C08 module=A00000006203010C0801
+
+# clean up any previous install
+set stop_on_error=false
+delete aid=D000CAFE000101
+delete aid=D000CAFE0001
+set stop_on_error=true
+
+# load and install
+load file=data/HelloWorldApplet.cap
+install package=D000CAFE0001 module=D000CAFE000101
 info_contents display=true
+
+# drop secure channel, then select the applet and exercise it
+reconnect
+select aid=D000CAFE000101
+apdu apdu=000100000C
+apdu apdu=0002000002

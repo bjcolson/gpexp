@@ -19,6 +19,16 @@ _RED = "\033[31m"
 _RESET = "\033[0m"
 
 
+def _c4_wrap(data: bytes) -> bytes:
+    """Wrap *data* in a C4 (Load File Data Block) BER-TLV."""
+    length = len(data)
+    if length < 0x80:
+        return b"\xC4" + bytes([length]) + data
+    if length < 0x100:
+        return b"\xC4\x81" + bytes([length]) + data
+    return b"\xC4\x82" + length.to_bytes(2, "big") + data
+
+
 class GP:
     """GlobalPlatform protocol operations."""
 
@@ -73,6 +83,13 @@ class GP:
         apdu = APDU(cla=0x80, ins=0xE4, p1=0x00, p2=0x00, data=data)
         return self._send(f"DELETE KEY ver={key_version:02X}", apdu)
 
+    def send_delete(self, aid: bytes, related: bool = False) -> Response:
+        """DELETE (80 E4) — delete card content by AID."""
+        data = bytes([0x4F, len(aid)]) + aid
+        p2 = 0x80 if related else 0x00
+        apdu = APDU(cla=0x80, ins=0xE4, p1=0x00, p2=p2, data=data)
+        return self._send(f"DELETE {aid.hex().upper()}", apdu)
+
     def send_put_key(self, old_kvn: int, key_id: int, data: bytes) -> Response:
         """PUT KEY (80 D8)."""
         apdu = APDU(cla=0x80, ins=0xD8, p1=old_kvn, p2=key_id, data=data)
@@ -106,9 +123,13 @@ class GP:
     def load_file(self, data: bytes, block_size: int = 239) -> Response:
         """LOAD sequence — split data into blocks and send them all.
 
+        The entire load file is wrapped in a single C4 (Load File Data
+        Block) TLV, then split into *block_size* blocks for transmission.
+
         Returns the Response from the last LOAD block.
         """
-        blocks = [data[i : i + block_size] for i in range(0, len(data), block_size)]
+        wrapped = _c4_wrap(data)
+        blocks = [wrapped[i : i + block_size] for i in range(0, len(wrapped), block_size)]
         if not blocks:
             blocks = [b""]
         for i, block in enumerate(blocks):
