@@ -35,14 +35,16 @@ Commands are `cmd_*` plain functions in modules split across two packages:
 - **`state.py`** — Generic settings (`stop_on_error`)
 
 **GP** (`src/gpexp/app/gp/commands/`):
-- **`gp.py`** — GlobalPlatform commands (auth, list_contents, put_keys, etc.)
-- **`state.py`** — GP settings (`key`) and display
+- **`gp.py`** — GlobalPlatform commands (auth, info_contents, put_keys, etc.)
+- **`state.py`** — GP settings (`key`)
 
 Each function takes `runner` as its first argument. `Runner.__init__` collects `cmd_*` functions from all modules listed in `commands.COMMAND_MODULES` via `functools.partial`. Each module declares `_raw_commands`, `_hex_params` sets and an optional `_settings` dict that Runner unions together. `GPRunner` combines generic and GP `COMMAND_MODULES`.
 
 The `set` command is built into `Runner`. Protocol-specific parameters are declared via module-level `_settings` dicts mapping setting names to `(runner, value: str)` handler functions. `set` is a raw command — handlers always receive string values.
 
 Parameter values that map to APDU fields or tags (listed in module-level `_hex_params` sets) are always parsed as hex. Commands listed in module-level `_raw_commands` sets receive all parameters as raw strings.
+
+Data-collecting commands (`probe`, `info_cplc`, `info_card_data`, `info_keys`, `info_contents`) accept `display=true` to print their results immediately after collection.
 
 ## Running
 
@@ -57,6 +59,8 @@ CLI entry point defined in `src/gpexp/scripts.py`, calls `src/gpexp/app/main.py:
 ## Scenario files
 
 Scenario files (`.gps`) live in `scenarios/`. One command per line, `#` comments, blank lines ignored. Stops on first error by default (`set stop_on_error=false` to override).
+
+Some commands have implicit ordering dependencies that vary by card. No runtime checks enforce these — misordering produces raw SW error codes. For example, `info_contents` requires selecting the ISD and an authenticated session (`probe` → `auth` → `info_contents`). Use `-v` to see APDU traces when debugging failures.
 
 ## Adding commands
 

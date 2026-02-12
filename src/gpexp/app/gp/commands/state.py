@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import logging
 
-from gpexp.app.gp.display import format_card_info
-
 lg = logging.getLogger(__name__)
 
 # Commands that receive raw string kwargs (no conversion).
@@ -23,9 +21,3 @@ def _set_key(runner, value: str) -> None:
 _settings: dict[str, callable] = {
     "key": _set_key,
 }
-
-
-def cmd_display(runner) -> bool:
-    """Display collected card information."""
-    lg.info("\n%s", format_card_info(runner._info))
-    return True

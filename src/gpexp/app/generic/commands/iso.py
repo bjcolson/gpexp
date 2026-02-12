@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 
+from gpexp.core.base.tags import TAG_NAMES
 from gpexp.core.generic import (
     ProbeMessage,
     PutDataMessage,
@@ -21,12 +22,21 @@ _raw_commands: set[str] = {"put_data", "read_binary", "select", "update_binary"}
 _hex_params: set[str] = set()
 
 
-def cmd_probe(runner) -> bool:
+def cmd_probe(runner, *, display: bool = False) -> bool:
     """Probe card: UID, ATR, FCI."""
     result = runner._terminal.send(ProbeMessage())
     runner._info.uid = result.uid
     runner._info.atr = result.atr
     runner._info.fci = result.fci
+    if display:
+        lines = ["--- Card ---"]
+        if result.uid:
+            lines.append(f"  UID  {result.uid.hex(' ').upper()}")
+        lines.append(f"  ATR  {result.atr.hex(' ').upper()}")
+        if result.fci:
+            for node in result.fci:
+                lines.append(node.format(TAG_NAMES, indent=1))
+        lg.info("\n".join(lines))
     return True
 
 

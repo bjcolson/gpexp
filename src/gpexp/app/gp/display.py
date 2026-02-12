@@ -148,55 +148,34 @@ def _format_entry(entry: AppEntry, states: dict[int, str]) -> str:
     return f"  {aid:<48s}{state}"
 
 
-# --- Main formatter ---
+# --- Composite formatters ---
 
-def format_card_info(info: GPCardInfo) -> str:
-    """Format full GP card info for terminal display."""
+def format_card_data(info: GPCardInfo) -> str:
+    """Format card data sections: keys, card recognition, IIN, CIN, seq counter."""
     sections: list[str] = []
-
-    # Card identity
-    lines = ["--- Card ---"]
-    if info.uid:
-        lines.append(f"  UID  {_hex(info.uid)}")
-    lines.append(f"  ATR  {_hex(info.atr)}")
-    if info.iin:
-        lines.append(f"  IIN  {_hex(info.iin)}")
-    if info.cin:
-        lines.append(f"  CIN  {_hex(info.cin)}")
-    if info.fci:
-        for node in info.fci:
-            lines.append(node.format(TAG_NAMES, indent=1))
-    sections.append("\n".join(lines))
-
-    # CPLC
-    if info.cplc:
-        sections.append(f"--- CPLC ---\n{format_cplc(info.cplc)}")
-
-    # Card Recognition Data
-    if info.card_recognition:
-        sections.append(f"--- Card Recognition ---\n{format_card_recognition(info.card_recognition)}")
-
-    # Key Information
     if info.key_info:
         sections.append(f"--- Keys ---\n{format_key_info(info.key_info)}")
-
-    # Sequence Counter
+    if info.card_recognition:
+        sections.append(f"--- Card Recognition ---\n{format_card_recognition(info.card_recognition)}")
+    if info.iin:
+        sections.append(f"  IIN  {_hex(info.iin)}")
+    if info.cin:
+        sections.append(f"  CIN  {_hex(info.cin)}")
     if info.seq_counter is not None:
         sections.append(f"--- Sequence Counter ---\n  {info.seq_counter}")
+    return "\n\n".join(sections)
 
-    # ISD
+
+def format_contents(info: GPCardInfo) -> str:
+    """Format ISD, applications, and packages."""
+    sections: list[str] = []
     if info.isd:
         entries = "\n".join(_format_entry(e, _ISD_STATES) for e in info.isd)
         sections.append(f"--- ISD ---\n{entries}")
-
-    # Applications
     if info.applications:
         entries = "\n".join(_format_entry(e, _APP_STATES) for e in info.applications)
         sections.append(f"--- Applications ({len(info.applications)}) ---\n{entries}")
-
-    # Packages
     if info.packages:
         entries = "\n".join(_format_entry(e, _PKG_STATES) for e in info.packages)
         sections.append(f"--- Packages ({len(info.packages)}) ---\n{entries}")
-
     return "\n\n".join(sections)

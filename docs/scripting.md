@@ -27,7 +27,7 @@ Commands are `cmd_*` functions organized in modules under `src/gpexp/app/gp/comm
 | `iso.py` | ISO 7816 generic file and data commands |
 | `gp.py` | GlobalPlatform commands |
 | `session.py` | Session management and raw APDU |
-| `state.py` | State display and configuration |
+| `state.py` | Configuration |
 
 The `cmd_` prefix is stripped to form the command name. The first docstring line becomes the help text. The `help` command lives on `Runner` itself.
 
@@ -37,7 +37,7 @@ Each command sends a single APDU.
 
 | Command | Parameters | APDU | Description |
 |---------|-----------|------|-------------|
-| `probe` | — | SELECT (`00 A4`) | Select default applet, collect UID, ATR, FCI |
+| `probe` | `display` | SELECT (`00 A4`) | Select default applet, collect UID, ATR, FCI |
 | `select` | `aid` or `fid`, `p1`, `p2` | SELECT (`00 A4`) | Select by AID, DF name, or EF file identifier |
 | `read_binary` | `le`, `offset`, `sfi` | READ BINARY (`00 B0`) | Read from a transparent EF |
 | `put_data` | `tag` (required), `data` | PUT DATA (`00 DA`) | Store a data object by tag (simple TLV) |
@@ -45,22 +45,22 @@ Each command sends a single APDU.
 
 ### GlobalPlatform commands (`gp.py`)
 
-**Single APDU:**
+**Action commands:**
 
-| Command | Parameters | APDU | Description |
-|---------|-----------|------|-------------|
-| `read_cplc` | — | GET DATA (`80 CA`, tag 9F7F) | Read CPLC data |
-| `put_keys` | `new_kvn`, `key_type`, `key_length` | PUT KEY (`80 D8`) | Load a new key set |
-| `delete_keys` | `kvn` (required) | DELETE KEY (`80 E4`) | Delete a key set by version number |
+| Command | Parameters | Description |
+|---------|-----------|-------------|
+| `auth` | `kvn`, `level` | Establish SCP02/SCP03 secure channel |
+| `put_keys` | `new_kvn`, `key_type`, `key_length` | Load a new key set |
+| `delete_keys` | `kvn` (required) | Delete a key set by version number |
 
-**Multi-APDU sequences:**
+**Info commands** — collect data into runner state, accept `display=true`:
 
-| Command | Parameters | APDUs | Description |
-|---------|-----------|-------|-------------|
-| `read_card_data` | — | 5× GET DATA (`80 CA`: tags E0, 66, 42, 45, C1) | Read key info, card recognition, IIN, CIN, sequence counter |
-| `read_key_info` | — | 5× GET DATA (`80 CA`: tags E0, 66, 42, 45, C1) | Read and log the key information template |
-| `auth` | `kvn`, `level` | INITIALIZE UPDATE (`80 50`) + EXTERNAL AUTHENTICATE (`84 82`) | Establish SCP02/SCP03 secure channel |
-| `list_contents` | — | 3+ GET STATUS (`80 F2`: ISD, apps, packages, with 6310 continuations) | List all card content |
+| Command | Parameters | Description |
+|---------|-----------|-------------|
+| `info_cplc` | `display` | Read CPLC data (GET DATA 9F7F) |
+| `info_card_data` | `display` | Read key info, card recognition, IIN, CIN, sequence counter (5× GET DATA) |
+| `info_keys` | `display` | Read the key information template (GET DATA 00E0) |
+| `info_contents` | `display` | List ISD, applications, and packages (GET STATUS) |
 
 ### Session commands (`session.py`)
 
@@ -75,7 +75,6 @@ Each command sends a single APDU.
 
 | Command | Parameters | Description |
 |---------|-----------|-------------|
-| `display` | — | Display collected card information |
 | `set` | `key`, `stop_on_error` | Set runner configuration |
 
 ### Built-in
@@ -97,6 +96,7 @@ All commands return `True` on success, `False` on error.
 | `new_kvn` | `30` | Target key version for PUT KEY |
 | `key_type` | `88` (AES) | Key type byte |
 | `key_length` | `16` | Key length in bytes (decimal) |
+| `display` | `false` | Print collected results immediately |
 
 ## Scenario files (.gps)
 
@@ -137,25 +137,24 @@ Parameters are parsed differently depending on the command and parameter name:
 
 ```
 # read_card.gps — probe, authenticate, and read card contents
-probe
-read_cplc
-read_card_data
+probe display=true
+info_cplc display=true
+info_card_data display=true
 auth kvn=20
-list_contents
-display
+info_contents display=true
 ```
 
 ### Example: put_delete_key.gps
 
 ```
 # put_delete_key.gps — authenticate, PUT KEY, then DELETE KEY
-read_card_data
+info_card_data
 auth kvn=20
-read_key_info
+info_keys display=true
 put_keys new_kvn=30
-read_key_info
+info_keys display=true
 delete_keys kvn=30
-read_key_info
+info_keys display=true
 ```
 
 ### Example: raw APDU
@@ -163,7 +162,7 @@ read_key_info
 ```
 # raw_get_data.gps — authenticate and send raw GET DATA 0066
 probe
-read_card_data
+info_card_data
 auth kvn=00
 apdu apdu=80CA006600
 ```

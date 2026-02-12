@@ -10,7 +10,12 @@ from gpexp.app.gp.cardinfo import (
     parse_key_info,
     parse_status,
 )
-from gpexp.app.gp.display import format_key_info
+from gpexp.app.gp.display import (
+    format_card_data,
+    format_contents,
+    format_cplc,
+    format_key_info,
+)
 from gpexp.core.gp import (
     C_MAC,
     AuthenticateMessage,
@@ -52,15 +57,17 @@ def _derive_key(runner, kvn: int) -> StaticKeys:
 # --- Commands ---
 
 
-def cmd_read_cplc(runner) -> bool:
+def cmd_info_cplc(runner, *, display: bool = False) -> bool:
     """Read CPLC data."""
     result = runner._terminal.send(GetCPLCMessage())
     if result.cplc is not None:
         runner._info.cplc = parse_cplc(result.cplc)
+        if display:
+            lg.info("--- CPLC ---\n%s", format_cplc(runner._info.cplc))
     return True
 
 
-def cmd_read_card_data(runner) -> bool:
+def cmd_info_card_data(runner, *, display: bool = False) -> bool:
     """Read GP data objects: key info, card recognition, IIN, CIN, seq counter."""
     result = runner._terminal.send(GetCardDataMessage())
     if result.key_info is not None:
@@ -73,6 +80,8 @@ def cmd_read_card_data(runner) -> bool:
         runner._info.cin = result.cin
     if result.seq_counter is not None:
         runner._info.seq_counter = result.seq_counter
+    if display:
+        lg.info("\n%s", format_card_data(runner._info))
     return True
 
 
@@ -95,22 +104,24 @@ def cmd_auth(runner, *, kvn: int = 0x00, level: int = C_MAC) -> bool:
     return True
 
 
-def cmd_list_contents(runner) -> bool:
+def cmd_info_contents(runner, *, display: bool = False) -> bool:
     """GET STATUS for ISD, applications, and packages."""
     result = runner._terminal.send(ListContentsMessage())
     runner._info.isd = parse_status(result.isd)
     runner._info.applications = parse_status(result.applications)
     runner._info.packages = parse_status(result.packages)
+    if display:
+        lg.info("\n%s", format_contents(runner._info))
     return True
 
 
-def cmd_read_key_info(runner) -> bool:
-    """Read and log the key information template."""
+def cmd_info_keys(runner, *, display: bool = False) -> bool:
+    """Read the key information template."""
     result = runner._terminal.send(GetCardDataMessage())
     if result.key_info is not None:
-        lg.info(
-            "--- Keys ---\n%s", format_key_info(parse_key_info(result.key_info))
-        )
+        runner._info.key_info = parse_key_info(result.key_info)
+        if display:
+            lg.info("--- Keys ---\n%s", format_key_info(runner._info.key_info))
     return True
 
 
