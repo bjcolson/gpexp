@@ -19,7 +19,15 @@ from gpexp.core.smartcard.logging import PROTOCOL, TRACE
     default=None,
     help="Run commands from a scenario file.",
 )
-def gpexp(verbose, file):
+@click.option(
+    "-r",
+    "--runner",
+    "runner",
+    type=click.Choice(["gp", "generic"]),
+    default="gp",
+    help="Runner type (default: gp).",
+)
+def gpexp(verbose, file, runner):
 
     logging.basicConfig(
         level=TRACE if verbose else PROTOCOL,
@@ -27,4 +35,4 @@ def gpexp(verbose, file):
     )
 
     from gpexp.app.main import main
-    main(file=file)
+    main(file=file, runner=runner)

@@ -25,14 +25,22 @@ SCP02 and SCP03 are both supported. The `_authenticate` handler selects the appr
 
 ## Runner
 
-`Runner` (`src/gpexp/app/gp/runner.py`) holds session state (terminal, CardInfo, key material) and dispatches commands. Commands are `cmd_*` plain functions in modules under `src/gpexp/app/gp/commands/`:
+`Runner` (`src/gpexp/app/generic/runner.py`) is the base runner class. It holds session state (terminal, `CardInfo`, `stop_on_error`) and dispatches commands. `GPRunner` (`src/gpexp/app/gp/runner.py`) extends it with GP-specific state (`GPCardInfo`, key material).
 
+Commands are `cmd_*` plain functions in modules split across two packages:
+
+**Generic** (`src/gpexp/app/generic/commands/`):
 - **`iso.py`** — ISO 7816 generic file and data commands (select, read_binary, etc.)
-- **`gp.py`** — GlobalPlatform commands (auth, list_contents, put_keys, etc.)
 - **`session.py`** — Session management and raw APDU (connect, disconnect, apdu)
-- **`state.py`** — State display and configuration (display, set)
+- **`state.py`** — Generic settings (`stop_on_error`)
 
-Each function takes `runner` as its first argument. `Runner.__init__` collects `cmd_*` functions from all modules listed in `commands.COMMAND_MODULES` via `functools.partial`. Each module declares `_raw_commands` and `_hex_params` sets that Runner unions together.
+**GP** (`src/gpexp/app/gp/commands/`):
+- **`gp.py`** — GlobalPlatform commands (auth, list_contents, put_keys, etc.)
+- **`state.py`** — GP settings (`key`) and display
+
+Each function takes `runner` as its first argument. `Runner.__init__` collects `cmd_*` functions from all modules listed in `commands.COMMAND_MODULES` via `functools.partial`. Each module declares `_raw_commands`, `_hex_params` sets and an optional `_settings` dict that Runner unions together. `GPRunner` combines generic and GP `COMMAND_MODULES`.
+
+The `set` command is built into `Runner`. Protocol-specific parameters are declared via module-level `_settings` dicts mapping setting names to `(runner, value: str)` handler functions. `set` is a raw command — handlers always receive string values.
 
 Parameter values that map to APDU fields or tags (listed in module-level `_hex_params` sets) are always parsed as hex. Commands listed in module-level `_raw_commands` sets receive all parameters as raw strings.
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from gpexp.app.generic.cardinfo import CardInfo
 from gpexp.core.smartcard.tlv import TLV, parse as parse_tlv
 
 
@@ -58,12 +59,9 @@ class AppEntry:
 
 
 @dataclass
-class CardInfo:
-    """Collected GP card information for analysis."""
+class GPCardInfo(CardInfo):
+    """GP-specific card information extending base CardInfo."""
 
-    uid: bytes | None = None
-    atr: bytes = b""
-    fci: list[TLV] = field(default_factory=list)
     cplc: CPLC | None = None
     key_info: list[KeyInfo] = field(default_factory=list)
     card_recognition: list[str] = field(default_factory=list)

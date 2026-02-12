@@ -1,4 +1,4 @@
-"""State display and configuration commands."""
+"""GP state display and configuration."""
 
 from __future__ import annotations
 
@@ -15,25 +15,17 @@ _raw_commands: set[str] = set()
 _hex_params: set[str] = set()
 
 
+def _set_key(runner, value: str) -> None:
+    runner._key = bytes.fromhex(value)
+    lg.info("key set to %s", runner._key.hex().upper())
+
+
+_settings: dict[str, callable] = {
+    "key": _set_key,
+}
+
+
 def cmd_display(runner) -> bool:
     """Display collected card information."""
     lg.info("\n%s", format_card_info(runner._info))
-    return True
-
-
-def cmd_set(runner, **kwargs: int | str | bool) -> bool:
-    """Set runner configuration (key=HEX, stop_on_error=BOOL)."""
-    for k, v in kwargs.items():
-        if k == "key":
-            if isinstance(v, str):
-                runner._key = bytes.fromhex(v)
-            elif isinstance(v, int):
-                # Interpret as hex string without prefix
-                runner._key = bytes.fromhex(f"{v:X}")
-            lg.info("key set to %s", runner._key.hex().upper())
-        elif k == "stop_on_error":
-            runner._stop_on_error = bool(v)
-            lg.info("stop_on_error = %s", runner._stop_on_error)
-        else:
-            lg.warning("unknown setting: %s", k)
     return True

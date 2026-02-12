@@ -4,13 +4,19 @@
 
 import logging
 
-from gpexp.app import gp
+from gpexp.app import generic, gp
 
 lg = logging.getLogger(__name__)
+
+_SESSIONS = {
+    "generic": generic.session,
+    "gp": gp.session,
+}
 
 
 def main(
     file: str | None = None,
+    runner: str = "gp",
 ):
     lg.debug("gpexp v1")
-    gp.session(file=file)
+    _SESSIONS[runner](file=file)

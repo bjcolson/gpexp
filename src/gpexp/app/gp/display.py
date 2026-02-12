@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from gpexp.app.gp.cardinfo import AppEntry, CardInfo, CPLC, KeyInfo
+from gpexp.app.gp.cardinfo import AppEntry, GPCardInfo, CPLC, KeyInfo
 from gpexp.core.base.tags import TAG_NAMES
 
 
@@ -150,7 +150,7 @@ def _format_entry(entry: AppEntry, states: dict[int, str]) -> str:
 
 # --- Main formatter ---
 
-def format_card_info(info: CardInfo) -> str:
+def format_card_info(info: GPCardInfo) -> str:
     """Format full GP card info for terminal display."""
     sections: list[str] = []
 
