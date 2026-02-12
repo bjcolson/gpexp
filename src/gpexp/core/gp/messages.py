@@ -7,6 +7,27 @@ from gpexp.core.gp.security import C_MAC, StaticKeys
 from gpexp.core.smartcard.tlv import TLV
 
 
+# MANAGE ELF UPGRADE P1 values
+UPGRADE_START = 0x01
+UPGRADE_RESUME = 0x02
+UPGRADE_RECOVERY = 0x03
+UPGRADE_ABORT = 0x04
+UPGRADE_STATUS = 0x08
+
+# Upgrade session status values (tag 90 in response)
+UPS_NO_SESSION = 0x00
+UPS_COMPLETED = 0x01
+UPS_WAITING_ELF = 0x02
+UPS_WAITING_RESTORE = 0x03
+UPS_WAITING_RESTORE_FAILED = 0x04
+UPS_INTERRUPTED_SAVING = 0x10
+UPS_INTERRUPTED_CLEANUP = 0x20
+UPS_INTERRUPTED_DELETE = 0x30
+UPS_INTERRUPTED_INSTALL = 0x40
+UPS_INTERRUPTED_RESTORE = 0x50
+UPS_INTERRUPTED_CONSOLIDATE = 0x60
+
+
 @dataclass
 class ListContentsMessage(Message):
     """Request to list all card contents (ISD, applications, packages)."""
@@ -142,3 +163,21 @@ class InstallMessage(Message):
 class InstallResult(Result):
     success: bool
     sw: int
+
+
+@dataclass
+class ManageUpgradeMessage(Message):
+    """MANAGE ELF UPGRADE (80 EA)."""
+
+    action: int
+    elf_aid: bytes = b""
+    options: int = 0
+
+
+@dataclass
+class ManageUpgradeResult(Result):
+    success: bool
+    sw: int
+    session_status: int | None = None
+    elf_aid: bytes | None = None
+    error: str | None = None

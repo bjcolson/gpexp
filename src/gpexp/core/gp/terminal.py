@@ -9,6 +9,7 @@ from cryptography.hazmat.decrepit.ciphers.algorithms import TripleDES
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
 from gpexp.core.gp.messages import (
+    UPGRADE_START,
     AuthenticateMessage,
     AuthenticateResult,
     DeleteKeyMessage,
@@ -25,6 +26,8 @@ from gpexp.core.gp.messages import (
     ListContentsResult,
     LoadMessage,
     LoadResult,
+    ManageUpgradeMessage,
+    ManageUpgradeResult,
     PutKeyMessage,
     PutKeyResult,
 )
@@ -294,3 +297,62 @@ class GPTerminal(GenericTerminal):
         p1 = 0x0C if message.make_selectable else 0x04
         resp = self._gp.send_install(p1, 0x00, bytes(buf))
         return InstallResult(success=resp.success, sw=resp.sw)
+
+    @handles(ManageUpgradeMessage)
+    def _manage_upgrade(self, message: ManageUpgradeMessage) -> ManageUpgradeResult:
+        data = b""
+        if message.action == UPGRADE_START:
+            # Build A1 TLV: 4F <aid> [80 01 <options>]
+            inner = bytes([0x4F, len(message.elf_aid)]) + message.elf_aid
+            if message.options:
+                inner += bytes([0x80, 0x01, message.options])
+            data = bytes([0xA1, len(inner)]) + inner
+
+        resp = self._gp.send_manage_elf_upgrade(message.action, data)
+        if not resp.success:
+            return ManageUpgradeResult(
+                success=False, sw=resp.sw, error=f"SW={resp.sw:04X}"
+            )
+
+        session_status, elf_aid = self._parse_upgrade_response(resp.data)
+        return ManageUpgradeResult(
+            success=True, sw=resp.sw,
+            session_status=session_status, elf_aid=elf_aid,
+        )
+
+    @staticmethod
+    def _parse_upgrade_response(data: bytes) -> tuple[int | None, bytes | None]:
+        """Extract session status and ELF AID from MANAGE ELF UPGRADE response.
+
+        Response format: [confirmation_len][confirmation][session_info_len][session_info_tlv]
+        Session info is an A1 TLV containing 90 (status) and optionally 4F (AID).
+        """
+        if not data:
+            return None, None
+
+        session_status = None
+        elf_aid = None
+
+        # Skip confirmation data (first length-prefixed block)
+        offset = 0
+        if offset >= len(data):
+            return None, None
+        conf_len = data[offset]
+        offset += 1 + conf_len
+
+        # Parse session info TLV block
+        if offset < len(data):
+            info_len = data[offset]
+            offset += 1
+            info_data = data[offset : offset + info_len]
+            nodes = parse_tlv(info_data)
+            for node in nodes:
+                if node.tag == 0xA1:
+                    inner = parse_tlv(node.value)
+                    for child in inner:
+                        if child.tag == 0x90 and child.value:
+                            session_status = child.value[0]
+                        elif child.tag == 0x4F:
+                            elf_aid = child.value
+
+        return session_status, elf_aid

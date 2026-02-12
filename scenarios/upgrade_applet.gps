@@ -1,0 +1,44 @@
+# upgrade_applet.gps — test ELF upgrade with HelloWorldApplet
+#
+# Installs the applet fresh, increments the counter a few times,
+# then performs an ELF upgrade with the same CAP file. If Amendment H
+# is supported, the counter value survives the upgrade.
+
+probe
+auth
+
+# --- clean slate ---
+set stop_on_error=false
+delete aid=D000CAFE000101
+delete aid=D000CAFE0001
+set stop_on_error=true
+
+# --- initial load and install ---
+load file=data/HelloWorldApplet.cap
+install package=D000CAFE0001 module=D000CAFE000101
+
+# --- exercise the applet: increment counter 3 times ---
+reconnect
+select aid=D000CAFE000101
+apdu apdu=000100000C
+apdu apdu=000100000C
+apdu apdu=000100000C
+# read counter — expect 0003
+apdu apdu=0002000002
+
+# --- ELF upgrade (same CAP, counter should survive) ---
+reconnect
+probe
+auth
+upgrade file=data/HelloWorldApplet.cap
+# resume triggers restore phase (Amendment H B.1 sequence)
+upgrade_resume
+
+# --- verify counter was preserved ---
+reconnect
+select aid=D000CAFE000101
+# read counter — should still be 0003 if upgrade preserved state
+apdu apdu=0002000002
+# one more increment — should become 0004
+apdu apdu=000100000C
+apdu apdu=0002000002

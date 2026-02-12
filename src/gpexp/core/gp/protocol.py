@@ -95,6 +95,11 @@ class GP:
         apdu = APDU(cla=0x80, ins=0xD8, p1=old_kvn, p2=key_id, data=data)
         return self._send(f"PUT KEY old_ver={old_kvn:02X} id={key_id:02X}", apdu)
 
+    def send_manage_elf_upgrade(self, p1: int, data: bytes = b"") -> Response:
+        """MANAGE ELF UPGRADE (80 EA)."""
+        apdu = APDU(cla=0x80, ins=0xEA, p1=p1, p2=0x00, data=data, le=0x00)
+        return self._send(f"MANAGE ELF UPGRADE P1={p1:02X}", apdu)
+
     def send_install(self, p1: int, p2: int, data: bytes) -> Response:
         """INSTALL (80 E6)."""
         apdu = APDU(cla=0x80, ins=0xE6, p1=p1, p2=p2, data=data)

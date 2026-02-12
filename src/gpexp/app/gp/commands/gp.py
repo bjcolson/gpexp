@@ -18,6 +18,16 @@ from gpexp.app.gp.display import (
 )
 from gpexp.core.gp import (
     C_MAC,
+    UPGRADE_ABORT,
+    UPGRADE_RECOVERY,
+    UPGRADE_RESUME,
+    UPGRADE_START,
+    UPGRADE_STATUS,
+    UPS_COMPLETED,
+    UPS_NO_SESSION,
+    UPS_WAITING_ELF,
+    UPS_WAITING_RESTORE,
+    UPS_WAITING_RESTORE_FAILED,
     AuthenticateMessage,
     DeleteKeyMessage,
     DeleteMessage,
@@ -26,6 +36,7 @@ from gpexp.core.gp import (
     InstallMessage,
     ListContentsMessage,
     LoadMessage,
+    ManageUpgradeMessage,
     PutKeyMessage,
     StaticKeys,
 )
@@ -34,13 +45,34 @@ from gpexp.core.gp.capfile import read_load_file
 lg = logging.getLogger(__name__)
 
 # Commands that receive raw string kwargs (no conversion).
-_raw_commands: set[str] = {"load", "install", "delete"}
+_raw_commands: set[str] = {"load", "install", "delete", "upgrade", "upgrade_resume"}
 
 # Parameter names always parsed as hex.
 _hex_params: set[str] = {"kvn", "new_kvn", "key_type", "key_length", "level"}
 
 
 # --- Helpers ---
+
+
+_UPGRADE_STATUS_NAMES = {
+    0x00: "NO_SESSION",
+    0x01: "COMPLETED",
+    0x02: "WAITING_ELF",
+    0x03: "WAITING_RESTORE",
+    0x04: "WAITING_RESTORE_FAILED",
+    0x10: "INTERRUPTED_SAVING",
+    0x20: "INTERRUPTED_CLEANUP",
+    0x30: "INTERRUPTED_DELETE",
+    0x40: "INTERRUPTED_INSTALL",
+    0x50: "INTERRUPTED_RESTORE",
+    0x60: "INTERRUPTED_CONSOLIDATE",
+}
+
+
+def _upgrade_status_name(status: int | None) -> str:
+    if status is None:
+        return "unknown"
+    return _UPGRADE_STATUS_NAMES.get(status, f"UNKNOWN({status:#04x})")
 
 
 def _key_length_for_kvn(runner, kvn: int) -> int:
@@ -243,3 +275,148 @@ def cmd_install(
         return True
     lg.error("INSTALL failed: SW=%04X", result.sw)
     return False
+
+
+def cmd_upgrade(
+    runner, *, file: str, aid: str = "", sd: str = "", block_size: str = "239"
+) -> bool:
+    """Start ELF upgrade: MANAGE ELF UPGRADE [start] + LOAD new package."""
+    load_info = read_load_file(file)
+    elf_aid = bytes.fromhex(aid) if aid else load_info.package_aid
+    if not elf_aid:
+        lg.error("no package AID found in file and none provided via aid=")
+        return False
+    sd_aid = bytes.fromhex(sd) if sd else b""
+    bs = int(block_size)
+
+    lg.info("starting ELF upgrade for AID=%s", elf_aid.hex().upper())
+    result = runner._terminal.send(
+        ManageUpgradeMessage(action=UPGRADE_START, elf_aid=elf_aid)
+    )
+    if not result.success:
+        if result.sw == 0x6985:
+            lg.error("upgrade session already active — run upgrade_status to check")
+        else:
+            lg.error("MANAGE ELF UPGRADE [start] failed: %s", result.error)
+        return False
+
+    status_name = _upgrade_status_name(result.session_status)
+    if result.session_status != UPS_WAITING_ELF:
+        lg.error("unexpected session status after start: %s", status_name)
+        return False
+
+    lg.info("session status: %s — loading new ELF", status_name)
+    load_result = runner._terminal.send(
+        LoadMessage(
+            load_file_data=load_info.data,
+            load_file_aid=elf_aid,
+            sd_aid=sd_aid,
+            block_size=bs,
+        )
+    )
+    if not load_result.success:
+        lg.error("LOAD failed: %s (SW=%04X)", load_result.error, load_result.sw)
+        return False
+
+    lg.info(
+        "ELF loaded (%d blocks) — run upgrade_resume to trigger restore",
+        load_result.blocks_sent,
+    )
+    return True
+
+
+def cmd_upgrade_status(runner) -> bool:
+    """Query the current ELF upgrade session status."""
+    result = runner._terminal.send(ManageUpgradeMessage(action=UPGRADE_STATUS))
+    if not result.success:
+        lg.error("MANAGE ELF UPGRADE [status] failed: %s", result.error)
+        return False
+
+    status_name = _upgrade_status_name(result.session_status)
+    msg = f"upgrade session: {status_name}"
+    if result.elf_aid:
+        msg += f" (ELF AID={result.elf_aid.hex().upper()})"
+    lg.info("%s", msg)
+
+    match result.session_status:
+        case s if s == UPS_WAITING_ELF:
+            lg.info("  → load the new ELF with upgrade_resume")
+        case s if s == UPS_WAITING_RESTORE:
+            lg.info("  → run install to trigger restore")
+        case s if s == UPS_WAITING_RESTORE_FAILED:
+            lg.info("  → run upgrade_recover to attempt recovery")
+        case s if s is not None and s >= 0x10:
+            lg.info("  → run upgrade_resume or upgrade_recover")
+    return True
+
+
+def cmd_upgrade_resume(
+    runner, *, file: str = "", aid: str = "", sd: str = "", block_size: str = "239"
+) -> bool:
+    """Resume an interrupted ELF upgrade session."""
+    result = runner._terminal.send(ManageUpgradeMessage(action=UPGRADE_RESUME))
+    if not result.success:
+        lg.error("MANAGE ELF UPGRADE [resume] failed: %s", result.error)
+        return False
+
+    status_name = _upgrade_status_name(result.session_status)
+    lg.info("resume session status: %s", status_name)
+
+    match result.session_status:
+        case s if s == UPS_WAITING_ELF:
+            if not file:
+                lg.error("session needs ELF — provide file= parameter")
+                return False
+            load_info = read_load_file(file)
+            elf_aid = bytes.fromhex(aid) if aid else load_info.package_aid
+            if not elf_aid:
+                lg.error("no package AID found in file and none provided via aid=")
+                return False
+            sd_aid = bytes.fromhex(sd) if sd else b""
+            bs = int(block_size)
+            lg.info("loading new ELF (AID=%s)", elf_aid.hex().upper())
+            load_result = runner._terminal.send(
+                LoadMessage(
+                    load_file_data=load_info.data,
+                    load_file_aid=elf_aid,
+                    sd_aid=sd_aid,
+                    block_size=bs,
+                )
+            )
+            if not load_result.success:
+                lg.error("LOAD failed: %s (SW=%04X)", load_result.error, load_result.sw)
+                return False
+            lg.info("ELF loaded — run upgrade_resume again to trigger restore")
+        case s if s == UPS_WAITING_RESTORE:
+            lg.info("  → run upgrade_resume again to trigger restore")
+        case s if s == UPS_WAITING_RESTORE_FAILED:
+            lg.info("  → run upgrade_recover to attempt recovery")
+        case s if s in (UPS_NO_SESSION, UPS_COMPLETED):
+            lg.info("nothing to resume")
+        case s if s is not None and s >= 0x10:
+            lg.info("  → interrupted state, retry or run upgrade_recover")
+    return True
+
+
+def cmd_upgrade_recover(runner) -> bool:
+    """Force recovery of a failed ELF upgrade session."""
+    result = runner._terminal.send(ManageUpgradeMessage(action=UPGRADE_RECOVERY))
+    if not result.success:
+        lg.error("MANAGE ELF UPGRADE [recovery] failed: %s", result.error)
+        return False
+
+    status_name = _upgrade_status_name(result.session_status)
+    lg.info("recovery session status: %s", status_name)
+    if result.session_status == UPS_WAITING_ELF:
+        lg.info("  → load the original ELF to complete rollback")
+    return True
+
+
+def cmd_upgrade_abort(runner) -> bool:
+    """Abort the current ELF upgrade session."""
+    result = runner._terminal.send(ManageUpgradeMessage(action=UPGRADE_ABORT))
+    if not result.success:
+        lg.error("MANAGE ELF UPGRADE [abort] failed: %s", result.error)
+        return False
+    lg.info("upgrade session aborted")
+    return True

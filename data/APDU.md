@@ -114,28 +114,113 @@ SW 6D00 = INS not supported (ISO 7816-4).
 
 ## Overview
 
-GlobalPlatform Amendment H defines a mechanism for upgrading the Executable Load File (ELF) on a card — replacing applet code without deleting the applet instance or its persistent data. This is the on-card equivalent of updating a program while preserving its saved files.
+GlobalPlatform Card Specification v2.3.1 Amendment H defines a mechanism for upgrading the Executable Load File (ELF) on a card — replacing applet code without deleting applet instances. Instance data is migrated through an explicit save/restore protocol defined by the `org.globalplatform.upgrade` API (package AID `A00000015107`).
 
-## What This Applet Provides
+## How This Applet Implements Amendment H
 
-The persistent `counter` field (a Java `short` stored in EEPROM) serves as observable state that should survive an ELF upgrade. If the counter retains its value after a code upgrade, Amendment H is working. If it resets to zero, the card performed a full delete-and-reinstall.
+The applet implements the `OnUpgradeListener` interface from `org.globalplatform.upgrade`. This requires four callback methods that the card's OPEN invokes during the upgrade lifecycle:
+
+### `onSave()` — Saving Phase
+
+Called on the **old** applet instance. Serializes instance data into an `Element` container:
+
+```java
+public Element onSave() {
+    return UpgradeManager.createElement(
+            Element.TYPE_SIMPLE, Element.SIZE_SHORT, (short) 0)
+        .write(counter);
+}
+```
+
+Creates an Element with 2 bytes of primitive storage (one `short`), zero object references. Writes the `counter` value. The OPEN holds this Element across the deletion/reload boundary.
+
+### `onCleanup()` — Cleanup Sequence
+
+Called on the **old** applet instance after saving. For cleanup operations needed before deletion (e.g., releasing shared interface objects). Must not modify migrated data. Must be idempotent (safe to re-run after power loss). `Applet.uninstall()` is **not** called during upgrades.
+
+```java
+public void onCleanup() {
+    // Nothing to clean up.
+}
+```
+
+### `onRestore(Element root)` — Restore Phase
+
+Called on the **new** applet instance (after `install()`) with the Element from `onSave()`. Deserializes the saved data back into the new instance's fields:
+
+```java
+public void onRestore(Element root) {
+    root.initRead();        // Reset read pointers (required for power-loss recovery)
+    counter = root.readShort();
+}
+```
+
+`initRead()` must always be called before any `readXXX()` — if the Restore Phase is resumed after a power loss, read pointers need to be reset.
+
+### `onConsolidate()` — Consolidation
+
+Called on the **new** applet instance after **all** instances in the package have been restored. Used for cross-instance initialization (e.g., obtaining SIO references to sibling applets). Not needed here.
+
+```java
+public void onConsolidate() {
+    // No cross-instance dependencies.
+}
+```
+
+## Element Serialization Format
+
+The `counter` field is serialized as a single `Element`:
+
+| Field | Type | Size | Element method |
+|-------|------|------|----------------|
+| `counter` | `short` | 2 bytes | `write(short)` / `readShort()` |
+
+Total: `primitiveDataSize = Element.SIZE_SHORT` (2 bytes), `objectCount = 0`.
+
+Primitive data and object references are stored **separately** by the Element for security — object references cannot be forged from primitive data. Since this applet has no object fields to migrate, `objectCount` is 0.
+
+## Upgrade Lifecycle (Card-Side)
+
+The full sequence managed by the card's OPEN:
+
+1. **Initiation** — host sends `MANAGE ELF UPGRADE [start]` to the Security Domain
+2. **Saving Phase** — OPEN calls `onSave()` on each old instance implementing `OnUpgradeListener`. If any throws, the **entire upgrade aborts**.
+3. **Cleanup Sequence** — OPEN calls `onCleanup()` on each old instance. Exceptions silently ignored.
+4. **Deletion** — old package and instances are deleted. Saved Elements are preserved.
+5. **Loading** — new ELF is loaded via standard LOAD commands.
+6. **Restore Phase** — OPEN creates new instances (calls `install()`), then calls `onRestore(root)` on each. If any throws, restore is aborted and recovery begins.
+7. **Consolidation** — OPEN calls `onConsolidate()` on each new instance. Exceptions silently ignored.
+8. **Completion** — saved Elements are garbage collected.
+
+## Build Dependencies
+
+The applet links against:
+
+| Package | AID | Export source |
+|---------|-----|---------------|
+| `org.globalplatform.upgrade` v1.1 | `A00000015107` | `globalplatform-exports/org.globalplatform.upgrade-1.1/` |
+
+The card must have the `org.globalplatform.upgrade` package available on-card. Card support for Amendment H is indicated by Tag `89` value `01` in the Card Recognition Data.
+
+The `org.globalplatform.upgrade` package is **separate** from the base `org.globalplatform` package (`A00000015100`) — they have independent AIDs and versioning.
 
 ## Requirements for Amendment H Compatibility
 
-The applet satisfies the following requirements:
-
-1. **Stable AIDs** — the package AID (`D000CAFE0001`) and applet AID (`D000CAFE000101`) remain the same across versions
-2. **Version field** — `build.xml` sets `version="1.0"`, incremented for each upgrade (e.g., `1.1`, `2.0`)
-3. **Stable class layout** — the `counter` field must remain at the same position in the class across versions so the JCVM maps existing instance data to the upgraded code
-4. **Card support** — the card's OS and GlobalPlatform implementation must support Amendment H (not all cards do)
+1. **Implements `OnUpgradeListener`** — the applet class implements all four callbacks
+2. **Stable AIDs** — package AID (`D000CAFE0001`) and applet AID (`D000CAFE000101`) remain the same across versions
+3. **Version field** — `build.xml` sets `version="1.0"`, incremented for each upgrade (e.g., `1.1`, `2.0`)
+4. **Idempotent callbacks** — `onCleanup()` and `onRestore()` can safely re-run after power loss
+5. **No transactions in callbacks** — the OPEN aborts any open transaction on return from any callback
+6. **Card support** — the card must support Amendment H and have the upgrade API package on-card
 
 ## Upgrade Rules
 
-When modifying the applet for an upgrade:
+When modifying the applet for a new version:
 
-- **Safe changes**: modifying method bodies, adding new methods, adding new static fields, adding new instructions
-- **Unsafe changes**: removing or reordering instance fields, changing field types, renaming the class — these will corrupt or lose persistent data
-- **Adding instance fields**: new fields may be appended (card-dependent), but existing field order must be preserved
+- **Safe changes**: modifying method bodies, adding new methods, adding new static fields, adding new INS handlers
+- **Extending saved state**: add new fields to the Element in `onSave()` — use `UpgradeManager.getPreviousPackageVersion()` in `onRestore()` to handle version differences
+- **Removing fields**: stop writing them in `onSave()`, but handle their absence in `onRestore()` if upgrading from an older version
+- **Key constraint**: `onRestore()` must be able to read exactly what `onSave()` wrote — same types, same order
 
 ## Test Procedure
 
@@ -143,11 +228,6 @@ When modifying the applet for an upgrade:
 
 ```bash
 JAVA_HOME=/usr/lib/jvm/java-11-openjdk ant clean build
-```
-
-Install `HelloWorldApplet.cap` onto the card using GlobalPlatformPro or equivalent:
-
-```bash
 gp --install HelloWorldApplet.cap
 ```
 
@@ -156,25 +236,19 @@ gp --install HelloWorldApplet.cap
 ```
 >> 00 A4 04 00 07 D000CAFE000101    # Select
 << 9000
->> 00 01 00 00 0C                        # Hello (counter=1)
+>> 00 01 00 00 0C                   # Hello (counter=1)
 << 48656C6C6F20576F726C6421 9000
->> 00 01 00 00 0C                        # Hello (counter=2)
+>> 00 01 00 00 0C                   # Hello (counter=2)
 << 48656C6C6F20576F726C6421 9000
->> 00 01 00 00 0C                        # Hello (counter=3)
+>> 00 01 00 00 0C                   # Hello (counter=3)
 << 48656C6C6F20576F726C6421 9000
->> 00 02 00 00 02                        # Get counter
-<< 0003 9000                             # Confirmed: 3
+>> 00 02 00 00 02                   # Get counter
+<< 0003 9000                        # Confirmed: 3
 ```
 
 ### 3. Build v1.1
 
-Bump the version in `build.xml`:
-
-```xml
-version="1.1"
-```
-
-Make any code change (e.g., modify the greeting text). Then rebuild:
+Bump the version in `build.xml` to `version="1.1"`, make any code change, rebuild:
 
 ```bash
 JAVA_HOME=/usr/lib/jvm/java-11-openjdk ant clean build
@@ -182,31 +256,29 @@ JAVA_HOME=/usr/lib/jvm/java-11-openjdk ant clean build
 
 ### 4. Perform ELF upgrade
 
-Use GlobalPlatformPro with the `--upgrade` flag (or equivalent for your tool):
-
 ```bash
 gp --upgrade HelloWorldApplet.cap
 ```
 
-This replaces the load file but keeps the applet instance and its EEPROM data.
+The card's OPEN will call `onSave()` on the old instance, delete the old ELF, load the new ELF, call `install()` then `onRestore()` on the new instance.
 
 ### 5. Verify state preservation
 
 ```
 >> 00 A4 04 00 07 D000CAFE000101    # Select (same AID)
 << 9000
->> 00 02 00 00 02                        # Get counter
-<< 0003 9000                             # Should still be 3
->> 00 01 00 00 0C                        # Hello (counter=4)
+>> 00 02 00 00 02                   # Get counter
+<< 0003 9000                        # Still 3 — migrated via onSave/onRestore
+>> 00 01 00 00 0C                   # Hello (counter=4)
 << 48656C6C6F20576F726C6421 9000
->> 00 02 00 00 02                        # Get counter
-<< 0004 9000                             # Continues from 3
+>> 00 02 00 00 02                   # Get counter
+<< 0004 9000                        # Continues from 3
 ```
 
 ### Interpreting Results
 
 | Counter after upgrade | Meaning |
 |-----------------------|---------|
-| Retained (e.g., 3)   | Amendment H upgrade succeeded — instance data preserved |
-| Reset to 0           | Card did a full delete-and-reinstall — Amendment H not supported or not used |
+| Retained (e.g., 3)   | Amendment H upgrade succeeded — `onSave()`/`onRestore()` migrated the counter |
+| Reset to 0           | `onRestore()` was not called — card may not support Amendment H, or upgrade was done as delete+reinstall |
 | Error on SELECT      | Upgrade failed — applet instance was lost |
