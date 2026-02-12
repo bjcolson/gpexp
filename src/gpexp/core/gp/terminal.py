@@ -116,6 +116,8 @@ class GPTerminal(GenericTerminal):
         super().__init__(agent)
         self._gp = GP(agent.transmit)
         self._static_keys: StaticKeys | None = None
+        self._session_dek: bytes = b""
+        self._aes_dek: bool = False
 
     @handles(GetCPLCMessage)
     def _get_cplc(self, message: GetCPLCMessage) -> GetCPLCResult:
@@ -196,6 +198,8 @@ class GPTerminal(GenericTerminal):
             return AuthenticateResult(authenticated=False, error=str(exc))
 
         self._static_keys = message.keys
+        self._session_dek = setup.dek
+        self._aes_dek = setup.aes_dek
         self._agent.open_channel(setup.channel)
 
         try:
@@ -219,14 +223,11 @@ class GPTerminal(GenericTerminal):
 
     @handles(PutKeyMessage)
     def _put_key(self, message: PutKeyMessage) -> PutKeyResult:
-        channel = self._agent._channel
-        aes_dek = isinstance(channel, scp03.SCP03Channel)
-        dek = channel.dek
         data = _build_put_key_data(
             message.new_kvn,
             [message.new_keys.enc, message.new_keys.mac, message.new_keys.dek],
-            dek,
-            aes_dek,
+            self._session_dek,
+            self._aes_dek,
             message.key_type,
         )
         # GP: bit 8 of P2 = multiple keys in command data

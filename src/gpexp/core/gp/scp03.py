@@ -123,13 +123,15 @@ def establish(
         s_mac, host_challenge, card_challenge
     )
 
-    channel = SCP03Channel(s_enc, s_mac, s_rmac, static_keys.dek, security_level)
+    channel = SCP03Channel(s_enc, s_mac, s_rmac, security_level)
 
     return SessionSetup(
         key_info=key_info,
         i_param=i_param,
         host_cryptogram=host_cryptogram,
         channel=channel,
+        dek=static_keys.dek,
+        aes_dek=True,
     )
 
 
@@ -146,13 +148,11 @@ class SCP03Channel:
         s_enc: bytes,
         s_mac: bytes,
         s_rmac: bytes,
-        dek: bytes,
         security_level: int,
     ) -> None:
         self._s_enc = s_enc
         self._s_mac = s_mac
         self._s_rmac = s_rmac
-        self._dek = dek
         self._security_level = security_level
         self._mac_chain = b"\x00" * 16
         self._enc_counter = 1
@@ -160,10 +160,6 @@ class SCP03Channel:
     @property
     def security_level(self) -> int:
         return self._security_level
-
-    @property
-    def dek(self) -> bytes:
-        return self._dek
 
     def _next_enc_icv(self) -> bytes:
         """Derive encryption ICV from counter, then increment."""

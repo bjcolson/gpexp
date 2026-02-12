@@ -28,3 +28,5 @@ class SessionSetup:
     i_param: int
     host_cryptogram: bytes
     channel: object  # SCP02Channel | SCP03Channel
+    dek: bytes = b""
+    aes_dek: bool = False

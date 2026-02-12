@@ -159,13 +159,15 @@ def establish(
         s_enc, host_challenge, sequence_counter, card_challenge
     )
 
-    channel = SCP02Channel(s_enc, s_mac, s_rmac, s_dek, security_level, i_param)
+    channel = SCP02Channel(s_enc, s_mac, s_rmac, security_level, i_param)
 
     return SessionSetup(
         key_info=key_info,
         i_param=i_param,
         host_cryptogram=host_cryptogram,
         channel=channel,
+        dek=s_dek,
+        aes_dek=False,
     )
 
 
@@ -191,14 +193,12 @@ class SCP02Channel:
         s_enc: bytes,
         s_mac: bytes,
         s_rmac: bytes,
-        s_dek: bytes,
         security_level: int,
         i_param: int,
     ) -> None:
         self._s_enc = s_enc
         self._s_mac = s_mac
         self._s_rmac = s_rmac
-        self._dek = s_dek
         self._security_level = security_level
         self._i_param = i_param
         self._icv = _ZERO_ICV
@@ -207,10 +207,6 @@ class SCP02Channel:
     @property
     def security_level(self) -> int:
         return self._security_level
-
-    @property
-    def dek(self) -> bytes:
-        return self._dek
 
     def _next_icv(self) -> bytes:
         """Return the ICV for the next C-MAC computation."""
