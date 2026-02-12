@@ -9,7 +9,7 @@ Three-layer design under `src/gpexp/core/`:
 - **smartcard/** — Card wrapper around pyscard, APDU/Response types, BER-TLV parser, transport-level logging observer
 - **base/** — Agent, Terminal with message dispatch, ISO7816 protocol class, Message/Result types, ISO 7816-4 tag registry
 - **generic/** — GenericTerminal, messages (ProbeMessage/ProbeResult)
-- **gp/** — GP protocol class, GPTerminal (extends GenericTerminal), messages, SCP02/SCP03, tags
+- **gp/** — GP protocol class, GPTerminal (extends GenericTerminal), messages, SCP02/SCP03, CAP/IJC file reader, tags
 
 Data flow: **App → Terminal → Agent → Card**
 
@@ -17,7 +17,7 @@ The app sends `Message` objects to the terminal via `send()` and receives typed 
 
 Messages and their typed results are defined in per-package `messages.py` files. Each result subclass carries its own fields instead of a generic dict. Protocol classes (`ISO7816`, `GP`) are standalone objects that receive `agent.transmit` as a callable — there is one `Agent` class, no subclasses. Terminals construct the protocol objects they need (e.g. `GenericTerminal` creates `self._iso`, `GPTerminal` adds `self._gp`). Terminals inherit handlers from parent classes, so GPTerminal extends GenericTerminal.
 
-Protocol methods that map directly to APDU commands use a `send_` prefix (e.g. `send_select`, `send_get_data`, `send_get_status`). Higher-level operations that compose multiple commands do not (e.g. `list_content`, `list_all_content`).
+Protocol methods that map directly to APDU commands use a `send_` prefix (e.g. `send_select`, `send_get_data`, `send_get_status`, `send_install`, `send_load`). Higher-level operations that compose multiple commands do not (e.g. `list_content`, `list_all_content`, `load_file`).
 
 ## Secure Channel
 
@@ -34,7 +34,7 @@ Commands are `cmd_*` plain functions in modules split across two packages:
 - **`session.py`** — Session management and raw APDU (connect, disconnect, apdu)
 
 **GP** (`src/gpexp/app/gp/commands/`):
-- **`gp.py`** — GlobalPlatform commands (auth, info_contents, put_keys, etc.)
+- **`gp.py`** — GlobalPlatform commands (auth, load, install, info_contents, put_keys, etc.)
 
 Each function takes `runner` as its first argument. `Runner.__init__` collects `cmd_*` functions from all modules listed in `commands.COMMAND_MODULES` via `functools.partial`. Each module declares `_raw_commands`, `_hex_params` sets and an optional `_settings` dict that Runner unions together. `GPRunner` combines generic and GP `COMMAND_MODULES`.
 
@@ -43,6 +43,10 @@ The `help`, `set`, `quit`/`exit` commands are built into `Runner`. Settings (`st
 Parameter values that map to APDU fields or tags (listed in module-level `_hex_params` sets) are always parsed as hex. Commands listed in module-level `_raw_commands` sets receive all parameters as raw strings.
 
 Data-collecting commands (`probe`, `info_cplc`, `info_card_data`, `info_keys`, `info_contents`) accept `display=true` to print their results immediately after collection.
+
+## Loading applets
+
+The `load` command reads a CAP (ZIP) or IJC (raw binary) file via `capfile.read_load_file()`, then sends INSTALL [for load] + LOAD blocks. The `install` command sends INSTALL [for install and make selectable] and works independently — it can install from packages loaded in a prior session or by another tool. Both are raw commands (file paths and hex AIDs parsed manually).
 
 ## Running
 

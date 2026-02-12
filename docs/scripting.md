@@ -49,6 +49,8 @@ Each command sends a single APDU.
 | Command | Parameters | Description |
 |---------|-----------|-------------|
 | `auth` | `kvn`, `level` | Establish SCP02/SCP03 secure channel |
+| `load` | `file` (required), `aid`, `sd`, `block_size` | Load a CAP/IJC file onto the card |
+| `install` | `package` (required), `module`, `instance`, `privileges`, `params`, `selectable` | Install an applet from a loaded package |
 | `put_keys` | `new_kvn`, `key_type`, `key_length` | Load a new key set |
 | `delete_keys` | `kvn` (required) | Delete a key set by version number |
 
@@ -91,6 +93,10 @@ All commands return `True` on success, `False` on error.
 | `key_type` | `88` (AES) | Key type byte |
 | `key_length` | `16` | Key length in bytes (decimal) |
 | `display` | `false` | Print collected results immediately |
+| `block_size` | `239` | LOAD block size in bytes (decimal) |
+| `privileges` | `00` | Application privileges (hex) |
+| `params` | `C900` | Install parameters TLV (hex, `C900` = empty) |
+| `selectable` | `true` | Make applet selectable on install |
 
 ## Scenario files (.gps)
 
@@ -117,7 +123,7 @@ Execution stops on the first error by default. Override with `set stop_on_error=
 
 Parameters are parsed differently depending on the command and parameter name:
 
-1. **Raw commands** (`apdu`, `put_data`, `read_binary`, `select`, `update_binary`) — all parameters are passed as raw hex strings with no conversion.
+1. **Raw commands** (`apdu`, `put_data`, `read_binary`, `select`, `update_binary`, `load`, `install`) — all parameters are passed as raw strings with no conversion.
 
 2. **Hex parameters** (`kvn`, `new_kvn`, `key_type`, `key_length`, `level`) — always parsed as hexadecimal, so `kvn=20` means `0x20` (decimal 32).
 
@@ -278,4 +284,44 @@ The bytes are split as CLA(1) INS(1) P1(1) P2(1) then either Le(1) if 5 bytes to
 apdu cla=80 ins=CA p1=00 p2=66 le=00
 apdu cla=80 ins=E2 p1=80 p2=00 data=5F2001FF
 ```
+
+## The `load` command
+
+Load a CAP or IJC file onto the card. Sends INSTALL [for load] (`80 E6`, P1=`02`) followed by LOAD (`80 E8`) blocks. Requires an authenticated session.
+
+```
+load file=applets/MyApplet.cap
+load file=applets/MyApplet.cap aid=A00000006203010C08
+load file=applets/MyApplet.cap block_size=200
+load file=applets/MyApplet.ijc aid=A00000006203010C08
+```
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `file` | (required) | Path to CAP or IJC file |
+| `aid` | from CAP metadata | Load file AID (hex) — overrides AID extracted from CAP Header component |
+| `sd` | `""` (ISD) | Security domain AID (hex) |
+| `block_size` | `239` | LOAD block size in bytes (decimal) — 239 stays within short APDU with C-MAC |
+
+CAP files are ZIP archives; components are extracted and concatenated in GP 2.2 Table 6-2 order. IJC files are raw binary load file data. The package AID and applet AIDs are extracted from the Header and Applet components when available.
+
+## The `install` command
+
+Install an applet from a loaded package. Sends INSTALL [for install and make selectable] (`80 E6`, P1=`0C`). Can also install from packages loaded in a previous session or by another tool.
+
+```
+install package=A00000006203010C08 module=A00000006203010C0801
+install package=A00000006203010C08 module=A00000006203010C0801 instance=A00000006203010C0802
+install package=A00000006203010C08 module=A00000006203010C0801 privileges=04
+install package=A00000006203010C08 module=A00000006203010C0801 selectable=false
+```
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `package` | (required) | Executable load file AID (hex) |
+| `module` | same as `package` | Executable module AID (hex) |
+| `instance` | same as `module` | Application instance AID (hex) |
+| `privileges` | `00` | Application privileges (hex) |
+| `params` | `C900` | Install parameters TLV (hex) — `C900` = empty |
+| `selectable` | `true` | Make the applet selectable (P1=`0C`); `false` uses P1=`04` |
 

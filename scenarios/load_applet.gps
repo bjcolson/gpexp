@@ -1,0 +1,7 @@
+# load_applet.gps — load a CAP file and install the applet
+probe
+info_card_data
+auth
+load file=applets/MyApplet.cap
+install package=A00000006203010C08 module=A00000006203010C0801
+info_contents display=true

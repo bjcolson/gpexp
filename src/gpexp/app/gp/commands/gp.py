@@ -22,15 +22,18 @@ from gpexp.core.gp import (
     DeleteKeyMessage,
     GetCardDataMessage,
     GetCPLCMessage,
+    InstallMessage,
     ListContentsMessage,
+    LoadMessage,
     PutKeyMessage,
     StaticKeys,
 )
+from gpexp.core.gp.capfile import read_load_file
 
 lg = logging.getLogger(__name__)
 
 # Commands that receive raw string kwargs (no conversion).
-_raw_commands: set[str] = set()
+_raw_commands: set[str] = {"load", "install"}
 
 # Parameter names always parsed as hex.
 _hex_params: set[str] = {"kvn", "new_kvn", "key_type", "key_length", "level"}
@@ -154,4 +157,76 @@ def cmd_delete_keys(runner, *, kvn: int) -> bool:
         lg.info("DELETE KEY success: removed KVN %02X", kvn)
         return True
     lg.error("DELETE KEY failed: SW=%04X", result.sw)
+    return False
+
+
+def cmd_load(
+    runner, *, file: str, aid: str = "", sd: str = "", block_size: str = "239"
+) -> bool:
+    """Load a CAP/IJC file onto the card (INSTALL for load + LOAD)."""
+    load_info = read_load_file(file)
+    load_file_aid = bytes.fromhex(aid) if aid else load_info.package_aid
+    if not load_file_aid:
+        lg.error("no package AID found in file and none provided via aid=")
+        return False
+    sd_aid = bytes.fromhex(sd) if sd else b""
+    bs = int(block_size)
+
+    lg.info(
+        "loading %s (AID=%s, %d bytes, block_size=%d)",
+        file, load_file_aid.hex().upper(), len(load_info.data), bs,
+    )
+    result = runner._terminal.send(
+        LoadMessage(
+            load_file_data=load_info.data,
+            load_file_aid=load_file_aid,
+            sd_aid=sd_aid,
+            block_size=bs,
+        )
+    )
+    if result.success:
+        lg.info("LOAD success: %d blocks sent", result.blocks_sent)
+        return True
+    lg.error("LOAD failed: %s (SW=%04X)", result.error, result.sw)
+    return False
+
+
+def cmd_install(
+    runner,
+    *,
+    package: str,
+    module: str = "",
+    instance: str = "",
+    privileges: str = "00",
+    params: str = "C900",
+    selectable: str = "true",
+) -> bool:
+    """Install an applet from a loaded package (INSTALL for install)."""
+    package_aid = bytes.fromhex(package)
+    module_aid = bytes.fromhex(module) if module else package_aid
+    instance_aid = bytes.fromhex(instance) if instance else b""
+    priv = bytes.fromhex(privileges)
+    params_bytes = bytes.fromhex(params)
+    make_sel = selectable.lower() in ("true", "yes", "1")
+
+    lg.info(
+        "installing module=%s instance=%s from package=%s",
+        module_aid.hex().upper(),
+        (instance_aid or module_aid).hex().upper(),
+        package_aid.hex().upper(),
+    )
+    result = runner._terminal.send(
+        InstallMessage(
+            package_aid=package_aid,
+            module_aid=module_aid,
+            instance_aid=instance_aid,
+            privileges=priv,
+            params=params_bytes,
+            make_selectable=make_sel,
+        )
+    )
+    if result.success:
+        lg.info("INSTALL success")
+        return True
+    lg.error("INSTALL failed: SW=%04X", result.sw)
     return False

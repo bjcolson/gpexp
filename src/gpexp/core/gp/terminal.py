@@ -17,8 +17,12 @@ from gpexp.core.gp.messages import (
     GetCardDataResult,
     GetCPLCMessage,
     GetCPLCResult,
+    InstallMessage,
+    InstallResult,
     ListContentsMessage,
     ListContentsResult,
+    LoadMessage,
+    LoadResult,
     PutKeyMessage,
     PutKeyResult,
 )
@@ -229,3 +233,57 @@ class GPTerminal(GenericTerminal):
     def _delete_key(self, message: DeleteKeyMessage) -> DeleteKeyResult:
         resp = self._gp.send_delete_key(message.key_version)
         return DeleteKeyResult(success=resp.success, sw=resp.sw)
+
+    @handles(LoadMessage)
+    def _load(self, message: LoadMessage) -> LoadResult:
+        # INSTALL [for load]: AID | SD AID | hash(0) | params(0) | token(0)
+        buf = bytearray()
+        buf.append(len(message.load_file_aid))
+        buf.extend(message.load_file_aid)
+        buf.append(len(message.sd_aid))
+        buf.extend(message.sd_aid)
+        buf.append(0x00)  # load file data block hash length
+        buf.append(0x00)  # load parameters length
+        buf.append(0x00)  # load token length
+
+        resp = self._gp.send_install(0x02, 0x00, bytes(buf))
+        if not resp.success:
+            return LoadResult(
+                success=False, blocks_sent=0, sw=resp.sw,
+                error="INSTALL [for load] failed",
+            )
+
+        resp = self._gp.load_file(message.load_file_data, message.block_size)
+        block_count = max(
+            1,
+            (len(message.load_file_data) + message.block_size - 1) // message.block_size,
+        )
+        return LoadResult(
+            success=resp.success,
+            blocks_sent=block_count if resp.success else 0,
+            sw=resp.sw,
+            error=None if resp.success else "LOAD failed",
+        )
+
+    @handles(InstallMessage)
+    def _install(self, message: InstallMessage) -> InstallResult:
+        instance_aid = message.instance_aid or message.module_aid
+
+        # INSTALL [for install]: pkg AID | module AID | instance AID
+        #                        | privileges | params | token(0)
+        buf = bytearray()
+        buf.append(len(message.package_aid))
+        buf.extend(message.package_aid)
+        buf.append(len(message.module_aid))
+        buf.extend(message.module_aid)
+        buf.append(len(instance_aid))
+        buf.extend(instance_aid)
+        buf.append(len(message.privileges))
+        buf.extend(message.privileges)
+        buf.append(len(message.params))
+        buf.extend(message.params)
+        buf.append(0x00)  # install token length
+
+        p1 = 0x0C if message.make_selectable else 0x04
+        resp = self._gp.send_install(p1, 0x00, bytes(buf))
+        return InstallResult(success=resp.success, sw=resp.sw)

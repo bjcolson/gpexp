@@ -78,6 +78,17 @@ class GP:
         apdu = APDU(cla=0x80, ins=0xD8, p1=old_kvn, p2=key_id, data=data)
         return self._send(f"PUT KEY old_ver={old_kvn:02X} id={key_id:02X}", apdu)
 
+    def send_install(self, p1: int, p2: int, data: bytes) -> Response:
+        """INSTALL (80 E6)."""
+        apdu = APDU(cla=0x80, ins=0xE6, p1=p1, p2=p2, data=data)
+        return self._send(f"INSTALL P1={p1:02X}", apdu)
+
+    def send_load(self, last_block: bool, block_number: int, data: bytes) -> Response:
+        """LOAD (80 E8) — single block."""
+        p1 = 0x80 if last_block else 0x00
+        apdu = APDU(cla=0x80, ins=0xE8, p1=p1, p2=block_number, data=data)
+        return self._send(f"LOAD block={block_number:02X} last={last_block}", apdu)
+
     # -- operations --
 
     def list_content(self, scope: int) -> bytes:
@@ -91,6 +102,21 @@ class GP:
                 break
             resp = self.send_get_status(scope, next_occurrence=True)
         return bytes(buf)
+
+    def load_file(self, data: bytes, block_size: int = 239) -> Response:
+        """LOAD sequence — split data into blocks and send them all.
+
+        Returns the Response from the last LOAD block.
+        """
+        blocks = [data[i : i + block_size] for i in range(0, len(data), block_size)]
+        if not blocks:
+            blocks = [b""]
+        for i, block in enumerate(blocks):
+            last = i == len(blocks) - 1
+            resp = self.send_load(last, i, block)
+            if not resp.success:
+                return resp
+        return resp
 
     def list_all_content(self) -> tuple[bytes, bytes, bytes]:
         """GET STATUS for all scopes (ISD, applications, packages)."""

@@ -1,0 +1,11 @@
+# install_existing.gps — install an applet from an already-loaded package
+probe
+info_card_data
+auth
+
+# list card contents to find loaded packages
+info_contents display=true
+
+# install a new instance from an existing package
+install package=A00000006203010C08 module=A00000006203010C0801 instance=A00000006203010C0802
+info_contents display=true

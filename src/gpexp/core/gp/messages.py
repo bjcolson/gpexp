@@ -92,3 +92,39 @@ class PutKeyMessage(Message):
 class PutKeyResult(Result):
     success: bool
     sw: int
+
+
+@dataclass
+class LoadMessage(Message):
+    """Load a package onto the card (INSTALL [for load] + LOAD blocks)."""
+
+    load_file_data: bytes
+    load_file_aid: bytes
+    sd_aid: bytes = b""
+    block_size: int = 239
+
+
+@dataclass
+class LoadResult(Result):
+    success: bool
+    blocks_sent: int
+    sw: int
+    error: str | None = None
+
+
+@dataclass
+class InstallMessage(Message):
+    """Install an applet (INSTALL [for install and make selectable])."""
+
+    package_aid: bytes
+    module_aid: bytes
+    instance_aid: bytes = b""
+    privileges: bytes = b"\x00"
+    params: bytes = b"\xC9\x00"
+    make_selectable: bool = True
+
+
+@dataclass
+class InstallResult(Result):
+    success: bool
+    sw: int
