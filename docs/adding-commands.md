@@ -4,39 +4,54 @@ There are two levels of commands in gpexp: **runner commands** (user-facing, in 
 
 ## Runner commands (app layer)
 
-Runner commands are methods on `Runner` in `src/gpexp/app/gp/runner.py`. They are automatically discovered and exposed to the REPL, scenario files, and Python scenarios.
+Runner commands are `cmd_*` functions in modules under `src/gpexp/app/gp/commands/`. They are automatically discovered and exposed to the REPL, scenario files, and Python scenarios.
+
+| Module | Description |
+|--------|-------------|
+| `commands/iso.py` | ISO 7816 generic file and data commands (single APDU each) |
+| `commands/gp.py` | GlobalPlatform commands (single APDU and multi-APDU sequences) |
+| `commands/session.py` | Session management and raw APDU |
+| `commands/state.py` | State display and configuration |
+
+Commands that map to a single APDU belong in `iso.py` or `gp.py` depending on the protocol. Multi-APDU sequences (e.g. `auth`, `list_contents`, `read_card_data`) also live in `gp.py` — the terminal handler composes the APDU sequence. See `docs/scripting.md` for the full command reference with APDU details.
+
+`Runner` itself (`runner.py`) holds only the `help` command and the dispatch infrastructure (`execute`, `run_file`, `run_interactive`).
 
 ### Adding a runner command
 
-1. Add a `cmd_<name>` method to `Runner`:
+1. Add a `cmd_<name>` function to the appropriate command module. The first argument is `runner`:
 
 ```python
-def cmd_read_iin(self) -> bool:
+def cmd_read_iin(runner) -> bool:
     """Read Issuer Identification Number."""
-    result = self._terminal.send(GetCardDataMessage())
+    result = runner._terminal.send(GetCardDataMessage())
     if result.iin is not None:
-        self._info.iin = result.iin
+        runner._info.iin = result.iin
         lg.info("IIN: %s", result.iin.hex().upper())
     return True
 ```
 
-The method is automatically registered as command `read_iin`. The first line of the docstring becomes the help text. Return `True` on success, `False` on error.
+The function is automatically registered as command `read_iin`. The first line of the docstring becomes the help text. Return `True` on success, `False` on error.
 
-2. If any parameters map to APDU fields or tags (hex values), add the parameter names to `_hex_params`:
+2. If any parameters map to APDU fields or tags (hex values), add the parameter names to the module-level `_hex_params` set:
 
 ```python
-_hex_params: set[str] = {
-    "kvn", "new_kvn", "key_type", "key_length",
-    "my_new_tag",  # add here
-}
+_hex_params: set[str] = {"my_new_tag"}
 ```
 
 These are always parsed as hex from scenario files and the REPL (e.g. `my_command my_new_tag=9F7F`).
 
-3. If the command needs all parameters as raw strings (like `cmd_apdu`), add the command name to `_raw_commands`:
+3. If the command needs all parameters as raw strings (like `cmd_apdu`), add the command name to the module-level `_raw_commands` set:
 
 ```python
-_raw_commands: set[str] = {"apdu", "my_raw_command"}
+_raw_commands: set[str] = {"my_raw_command"}
+```
+
+4. If adding a new module, register it in `commands/__init__.py`:
+
+```python
+from gpexp.app.gp.commands import gp, iso, session, state, my_module
+COMMAND_MODULES = [iso, gp, session, state, my_module]
 ```
 
 ### Using from scenario files (.gps)
@@ -46,17 +61,6 @@ The command is immediately available:
 ```
 read_iin
 ```
-
-### Using from Python scenarios
-
-Call the method directly on the runner:
-
-```python
-def scenario_example(runner: Runner) -> None:
-    runner.cmd_read_iin()
-```
-
-Register in `SCENARIOS` in `src/gpexp/app/gp/scenarios.py` if it should be selectable via `-s`.
 
 ## Terminal messages (core layer)
 
@@ -118,12 +122,12 @@ Add a new message when you need to send an APDU (or APDU sequence) that no exist
 
    In `src/gpexp/core/gp/__init__.py`, add the new types to imports and `__all__`.
 
-5. **Add a runner command** that uses the new message (see above):
+5. **Add a runner command** in the appropriate command module (see above):
 
    ```python
-   def cmd_store_data(self, *, data: str = "") -> bool:
+   def cmd_store_data(runner, *, data: str = "") -> bool:
        """STORE DATA to the card."""
-       result = self._terminal.send(
+       result = runner._terminal.send(
            StoreDataMessage(data=bytes.fromhex(data))
        )
        if result.success:
@@ -137,8 +141,7 @@ Add a new message when you need to send an APDU (or APDU sequence) that no exist
 
 | What | Where | When |
 |------|-------|------|
-| Runner command | `runner.py` → `cmd_*` method | Composing existing messages, user-facing operation |
-| Python scenario | `scenarios.py` → function + `SCENARIOS` entry | Multi-step sequence with logic (loops, conditionals) |
+| Runner command | `commands/*.py` → `cmd_*` function | Composing existing messages, user-facing operation |
 | Scenario file | `scenarios/*.gps` | Scripted sequence of runner commands |
 | Terminal message | `core/**/messages.py` + `terminal.py` handler | New APDU or APDU sequence needed |
 | Protocol method | `core/**/protocol.py` → `send_*` | New single-APDU command |

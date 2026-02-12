@@ -25,31 +25,31 @@ SCP02 and SCP03 are both supported. The `_authenticate` handler selects the appr
 
 ## Runner
 
-`Runner` (`src/gpexp/app/gp/runner.py`) holds session state (terminal, CardInfo, key material) and exposes unit operations as `cmd_*` methods. Methods are auto-discovered and registered as commands available in the REPL, scenario files, and Python scenarios.
+`Runner` (`src/gpexp/app/gp/runner.py`) holds session state (terminal, CardInfo, key material) and dispatches commands. Commands are `cmd_*` plain functions in modules under `src/gpexp/app/gp/commands/`:
 
-Parameter values that map to APDU fields or tags (listed in `Runner._hex_params`) are always parsed as hex. Commands listed in `Runner._raw_commands` receive all parameters as raw strings.
+- **`iso.py`** — ISO 7816 generic file and data commands (select, read_binary, etc.)
+- **`gp.py`** — GlobalPlatform commands (auth, list_contents, put_keys, etc.)
+- **`session.py`** — Session management and raw APDU (connect, disconnect, apdu)
+- **`state.py`** — State display and configuration (display, set)
+
+Each function takes `runner` as its first argument. `Runner.__init__` collects `cmd_*` functions from all modules listed in `commands.COMMAND_MODULES` via `functools.partial`. Each module declares `_raw_commands` and `_hex_params` sets that Runner unions together.
+
+Parameter values that map to APDU fields or tags (listed in module-level `_hex_params` sets) are always parsed as hex. Commands listed in module-level `_raw_commands` sets receive all parameters as raw strings.
 
 ## Running
 
 ```bash
-uv run gpexp                          # default scenario (read_card)
-uv run gpexp -s list                  # list available scenarios and options
-uv run gpexp -s read_card             # run scenario by name
-uv run gpexp -s 2                     # run scenario by number
-uv run gpexp -s 2 -o kvn=20          # run scenario with options
+uv run gpexp                             # interactive REPL (default)
 uv run gpexp -f scenarios/read_card.gps  # run commands from a file
-uv run gpexp -i                       # interactive REPL
-uv run gpexp -v                       # TRACE-level logging (raw APDUs)
+uv run gpexp -v                          # TRACE-level logging (raw APDUs)
 ```
 
 CLI entry point defined in `src/gpexp/scripts.py`, calls `src/gpexp/app/main.py:main()`.
 
-## Scenarios
-
-Python scenarios live in `src/gpexp/app/gp/scenarios.py`. The `SCENARIOS` list registers them for CLI access. Each entry is a 4-tuple: `(name, description, callable, option_defs)`. The callable receives `(runner, **opts)`. Option defs map option names to `(type, default, description)` where type is `"bool"`, `"hex"`, or `"int"`.
+## Scenario files
 
 Scenario files (`.gps`) live in `scenarios/`. One command per line, `#` comments, blank lines ignored. Stops on first error by default (`set stop_on_error=false` to override).
 
 ## Adding commands
 
-See `docs/adding-commands.md` for how to add runner commands, terminal messages, and scenarios.
+See `docs/adding-commands.md` for how to add runner commands and terminal messages.

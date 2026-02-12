@@ -20,27 +20,68 @@ With no `-f` flag, gpexp starts the interactive REPL.
 
 ## Commands
 
-Commands map directly to `cmd_*` methods on the `Runner` class. The `cmd_` prefix is stripped to form the command name. The first docstring line becomes the help text.
+Commands are `cmd_*` functions organized in modules under `src/gpexp/app/gp/commands/`:
+
+| Module | Description |
+|--------|-------------|
+| `iso.py` | ISO 7816 generic file and data commands |
+| `gp.py` | GlobalPlatform commands |
+| `session.py` | Session management and raw APDU |
+| `state.py` | State display and configuration |
+
+The `cmd_` prefix is stripped to form the command name. The first docstring line becomes the help text. The `help` command lives on `Runner` itself.
+
+### ISO 7816 commands (`iso.py`)
+
+Each command sends a single APDU.
+
+| Command | Parameters | APDU | Description |
+|---------|-----------|------|-------------|
+| `probe` | — | SELECT (`00 A4`) | Select default applet, collect UID, ATR, FCI |
+| `select` | `aid` or `fid`, `p1`, `p2` | SELECT (`00 A4`) | Select by AID, DF name, or EF file identifier |
+| `read_binary` | `le`, `offset`, `sfi` | READ BINARY (`00 B0`) | Read from a transparent EF |
+| `put_data` | `tag` (required), `data` | PUT DATA (`00 DA`) | Store a data object by tag (simple TLV) |
+| `update_binary` | `offset`, `data`, `sfi` | UPDATE BINARY (`00 D6`) | Write to a transparent EF |
+
+### GlobalPlatform commands (`gp.py`)
+
+**Single APDU:**
+
+| Command | Parameters | APDU | Description |
+|---------|-----------|------|-------------|
+| `read_cplc` | — | GET DATA (`80 CA`, tag 9F7F) | Read CPLC data |
+| `put_keys` | `new_kvn`, `key_type`, `key_length` | PUT KEY (`80 D8`) | Load a new key set |
+| `delete_keys` | `kvn` (required) | DELETE KEY (`80 E4`) | Delete a key set by version number |
+
+**Multi-APDU sequences:**
+
+| Command | Parameters | APDUs | Description |
+|---------|-----------|-------|-------------|
+| `read_card_data` | — | 5× GET DATA (`80 CA`: tags E0, 66, 42, 45, C1) | Read key info, card recognition, IIN, CIN, sequence counter |
+| `read_key_info` | — | 5× GET DATA (`80 CA`: tags E0, 66, 42, 45, C1) | Read and log the key information template |
+| `auth` | `kvn`, `level` | INITIALIZE UPDATE (`80 50`) + EXTERNAL AUTHENTICATE (`84 82`) | Establish SCP02/SCP03 secure channel |
+| `list_contents` | — | 3+ GET STATUS (`80 F2`: ISD, apps, packages, with 6310 continuations) | List all card content |
+
+### Session commands (`session.py`)
+
+| Command | Parameters | APDU | Description |
+|---------|-----------|------|-------------|
+| `connect` | — | — | Connect to the card |
+| `disconnect` | — | — | Disconnect from the card |
+| `reconnect` | — | — | Disconnect and reconnect |
+| `apdu` | `apdu` or `cla`/`ins`/`p1`/`p2`/`data`/`le` | (user-defined) | Send a raw APDU |
+
+### State commands (`state.py`)
 
 | Command | Parameters | Description |
 |---------|-----------|-------------|
-| `probe` | — | Probe card: UID, ATR, FCI |
-| `select` | `aid` | SELECT an application by AID |
-| `put_data` | `tag` (required), `data` | PUT DATA — store a data object by tag (simple TLV) |
-| `update_binary` | `offset`, `data` | UPDATE BINARY — write to the currently selected transparent EF |
-| `read_cplc` | — | Read CPLC data |
-| `read_card_data` | — | Read GP data objects (key info, card recognition, IIN, CIN, sequence counter) |
-| `auth` | `kvn`, `level` | Authenticate with default keys |
-| `list_contents` | — | GET STATUS for ISD, applications, and packages |
-| `read_key_info` | — | Read and log the key information template |
-| `put_keys` | `new_kvn`, `key_type`, `key_length` | PUT KEY to load a new key set |
-| `delete_keys` | `kvn` (required) | Delete a key set by version number |
-| `connect` | — | Connect to the card |
-| `disconnect` | — | Disconnect from the card |
-| `reconnect` | — | Disconnect and reconnect |
 | `display` | — | Display collected card information |
 | `set` | `key`, `stop_on_error` | Set runner configuration |
-| `apdu` | `apdu` or `cla`/`ins`/`p1`/`p2`/`data`/`le` | Send a raw APDU |
+
+### Built-in
+
+| Command | Parameters | Description |
+|---------|-----------|-------------|
 | `help` | — | List available commands |
 | `quit` / `exit` | — | Exit the REPL |
 
@@ -82,7 +123,7 @@ Execution stops on the first error by default. Override with `set stop_on_error=
 
 Parameters are parsed differently depending on the command and parameter name:
 
-1. **Raw commands** (`apdu`, `put_data`, `select`, `update_binary`) — all parameters are passed as raw hex strings with no conversion.
+1. **Raw commands** (`apdu`, `put_data`, `read_binary`, `select`, `update_binary`) — all parameters are passed as raw hex strings with no conversion.
 
 2. **Hex parameters** (`kvn`, `new_kvn`, `key_type`, `key_length`, `level`) — always parsed as hexadecimal, so `kvn=20` means `0x20` (decimal 32).
 
@@ -159,6 +200,43 @@ set stop_on_error=false
 | `key` | hex string | `404142434445464748494A4B4C4D4E4F` | Session key material (replicated across ENC/MAC/DEK) |
 | `stop_on_error` | bool | `true` | Stop file execution on first error |
 
+## The `select` command
+
+SELECT a file or application (ISO 7816-4, INS `A4`). Three modes:
+
+```
+select aid=A0000000031010        # by AID, return FCI (P1=04, P2=00)
+select aid=A0000000031010 p2=0C  # by DF name, no response (P1=04, P2=0C)
+select fid=011C                  # EF by file identifier (P1=02, P2=0C)
+select p1=00 p2=00               # select MF
+```
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `aid` | `""` | Application identifier or DF name (hex) |
+| `fid` | `""` | EF file identifier (hex, sets P1=02 P2=0C) |
+| `p1` | `04` (aid) / `02` (fid) | Selection method |
+| `p2` | `00` (aid) / `0C` (fid) | Response control |
+
+When `fid=` is used, defaults change to P1=`02` P2=`0C` (select EF, no response data). Both `p1` and `p2` can be overridden explicitly.
+
+## The `read_binary` command
+
+Read data from a transparent EF (ISO 7816-4 READ BINARY, INS `B0`). Either from the currently selected file or by SFI.
+
+```
+read_binary le=00                    # read from selected file, offset 0
+read_binary offset=10 le=00          # read at offset 0x10
+read_binary sfi=1C le=00             # read by SFI (no SELECT needed)
+read_binary sfi=1C offset=10 le=00   # SFI with offset (max FF)
+```
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `offset` | `0` | Read offset (hex, up to `7FFF` without SFI, up to `FF` with SFI) |
+| `le` | `0` | Expected response length (hex, `00` = up to 256 bytes) |
+| `sfi` | — | Short file identifier (hex, encodes in P1 bit 8) |
+
 ## The `put_data` command
 
 Store a data object on the card by tag (ISO 7816-4 PUT DATA, simple TLV, INS `DA`). The tag maps to P1-P2, Lc is derived from the data length.
@@ -174,17 +252,20 @@ put_data tag=2002 data=A0A1A2A3
 
 ## The `update_binary` command
 
-Write data to the currently selected transparent EF (ISO 7816-4 UPDATE BINARY, INS `D6`). The offset maps to P1-P2, Lc is derived from the data length.
+Write data to a transparent EF (ISO 7816-4 UPDATE BINARY, INS `D6`). Either to the currently selected file or by SFI.
 
 ```
-update_binary data=A0A1A2A3
-update_binary offset=20 data=A0A1A2A3
+update_binary data=A0A1A2A3                    # selected file, offset 0
+update_binary offset=0495 data=A0A1A2A3        # selected file at offset
+update_binary sfi=1C data=A0A1A2A3             # by SFI (no SELECT needed)
+update_binary sfi=1C offset=10 data=A0A1A2A3   # SFI with offset (max FF)
 ```
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| `offset` | `0` | Write offset in the file (hex) |
+| `offset` | `0` | Write offset (hex, up to `7FFF` without SFI, up to `FF` with SFI) |
 | `data` | `""` | Data to write (hex) |
+| `sfi` | — | Short file identifier (hex, encodes in P1 bit 8) |
 
 ## The `apdu` command
 
