@@ -16,6 +16,10 @@ from gpexp.app.generic.cardinfo import CardInfo
 lg = logging.getLogger(__name__)
 
 
+class BreakRequested(Exception):
+    """Raised when a 'break' command is encountered in a script."""
+
+
 def _parse_value(s: str) -> int | str | bool:
     """Parse a command argument value.
 
@@ -145,6 +149,8 @@ class Runner:
         name, raw_kwargs = parsed
         if name in ("quit", "exit"):
             raise StopIteration
+        if name == "break":
+            raise BreakRequested
         cmd = self._commands.get(name)
         if cmd is None:
             lg.error("unknown command: %s", name)
@@ -165,12 +171,42 @@ class Runner:
             lg.error("command '%s' failed: %s", name, exc)
             return False
 
+    def _repl(self, prompt: str = "gpexp> ",
+              exit_commands: set[str] = {"quit", "exit"}) -> str | None:
+        """Run an interactive REPL.
+
+        Returns the command name that caused the exit, or None on EOF/Ctrl-C.
+        """
+        while True:
+            try:
+                line = input(prompt)
+            except (EOFError, KeyboardInterrupt):
+                print()
+                return None
+            parsed = parse_command(line)
+            if parsed and parsed[0] in exit_commands:
+                return parsed[0]
+            if parsed and parsed[0] == "break":
+                lg.warning("already in a break")
+                continue
+            try:
+                self.execute(line)
+            except StopIteration:
+                return "quit"
+
     def run_file(self, path: str) -> bool:
         """Read and execute commands from a file. Returns True if all succeed."""
         with open(path) as f:
             lines = f.readlines()
         for i, line in enumerate(lines, 1):
-            ok = self.execute(line)
+            try:
+                ok = self.execute(line)
+            except BreakRequested:
+                lg.info("break at line %d — type 'continue' to resume", i)
+                cmd = self._repl("gpexp (break)> ", {"continue", "quit", "exit"})
+                if cmd != "continue":
+                    return False
+                continue
             if not ok and self._stop_on_error:
                 lg.error("stopped at line %d: %s", i, line.strip())
                 return False
@@ -179,13 +215,4 @@ class Runner:
     def run_interactive(self) -> None:
         """Interactive REPL with readline support."""
         lg.info("interactive mode — type 'help' for commands, 'quit' to exit")
-        while True:
-            try:
-                line = input("gpexp> ")
-            except (EOFError, KeyboardInterrupt):
-                print()
-                break
-            try:
-                self.execute(line)
-            except StopIteration:
-                break
+        self._repl()
