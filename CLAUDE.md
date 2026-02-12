@@ -32,15 +32,13 @@ Commands are `cmd_*` plain functions in modules split across two packages:
 **Generic** (`src/gpexp/app/generic/commands/`):
 - **`iso.py`** — ISO 7816 generic file and data commands (select, read_binary, etc.)
 - **`session.py`** — Session management and raw APDU (connect, disconnect, apdu)
-- **`state.py`** — Generic settings (`stop_on_error`)
 
 **GP** (`src/gpexp/app/gp/commands/`):
 - **`gp.py`** — GlobalPlatform commands (auth, info_contents, put_keys, etc.)
-- **`state.py`** — GP settings (`key`)
 
 Each function takes `runner` as its first argument. `Runner.__init__` collects `cmd_*` functions from all modules listed in `commands.COMMAND_MODULES` via `functools.partial`. Each module declares `_raw_commands`, `_hex_params` sets and an optional `_settings` dict that Runner unions together. `GPRunner` combines generic and GP `COMMAND_MODULES`.
 
-The `set` command is built into `Runner`. Protocol-specific parameters are declared via module-level `_settings` dicts mapping setting names to `(runner, value: str)` handler functions. `set` is a raw command — handlers always receive string values.
+The `help`, `set`, `quit`/`exit` commands are built into `Runner`. Settings (`stop_on_error`) are registered directly on `Runner`; `GPRunner` adds GP-specific settings (`key`). Command modules can still contribute additional settings via `_settings` dicts. `set` is a raw command — handlers always receive string values.
 
 Parameter values that map to APDU fields or tags (listed in module-level `_hex_params` sets) are always parsed as hex. Commands listed in module-level `_raw_commands` sets receive all parameters as raw strings.
 

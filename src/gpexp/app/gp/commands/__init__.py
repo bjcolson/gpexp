@@ -1,5 +1,5 @@
 """GP runner command modules."""
 
-from gpexp.app.gp.commands import gp, state
+from gpexp.app.gp.commands import gp
 
-COMMAND_MODULES = [gp, state]
+COMMAND_MODULES = [gp]

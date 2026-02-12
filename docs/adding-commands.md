@@ -12,18 +12,16 @@ Runner commands are `cmd_*` functions in command modules. They are automatically
 |--------|-------------|
 | `iso.py` | ISO 7816 generic file and data commands (single APDU each) |
 | `session.py` | Session management and raw APDU |
-| `state.py` | Generic settings (`stop_on_error`) |
 
 **GP commands** (`src/gpexp/app/gp/commands/`) — GlobalPlatform-specific:
 
 | Module | Description |
 |--------|-------------|
 | `gp.py` | GlobalPlatform commands (single APDU and multi-APDU sequences) |
-| `state.py` | GP settings (`key`) and display |
 
-Commands that map to a single APDU belong in `iso.py` or `gp.py` depending on the protocol. Multi-APDU sequences (e.g. `auth`, `list_contents`, `read_card_data`) also live in `gp.py` — the terminal handler composes the APDU sequence. See `docs/scripting.md` for the full command reference with APDU details.
+Commands that map to a single APDU belong in `iso.py` or `gp.py` depending on the protocol. Multi-APDU sequences (e.g. `auth`, `info_contents`, `info_card_data`) also live in `gp.py` — the terminal handler composes the APDU sequence. See `docs/scripting.md` for the full command reference with APDU details.
 
-`Runner` (`src/gpexp/app/generic/runner.py`) holds the `help` and `set` commands and the dispatch infrastructure (`execute`, `run_file`, `run_interactive`). `GPRunner` extends `Runner` with GP session state (key material, `GPCardInfo`).
+`Runner` (`src/gpexp/app/generic/runner.py`) holds the built-in commands (`help`, `set`, `quit`/`exit`) and the dispatch infrastructure (`execute`, `run_file`, `run_interactive`). Settings (`stop_on_error`) are registered directly on `Runner`. `GPRunner` extends `Runner` with GP session state (key material, `GPCardInfo`) and adds GP-specific settings (`key`).
 
 ### Adding a runner command
 
@@ -55,9 +53,13 @@ These are always parsed as hex from scenario files and the REPL (e.g. `my_comman
 _raw_commands: set[str] = {"my_raw_command"}
 ```
 
-4. If the command needs custom settings for the `set` command, declare a `_settings` dict mapping setting names to handler functions. Each handler receives `(runner, value: str)`:
+4. If the command needs custom settings for the `set` command, either register them directly on the runner (for core settings like `stop_on_error` on `Runner` or `key` on `GPRunner`), or declare a `_settings` dict in a command module. Each handler receives `(runner, value: str)`:
 
 ```python
+# On a runner class:
+self._settings["my_option"] = self._set_my_option
+
+# Or in a command module:
 def _set_my_option(runner, value: str) -> None:
     runner._my_option = int(value, 16)
     lg.info("my_option = %04X", runner._my_option)
@@ -65,18 +67,18 @@ def _set_my_option(runner, value: str) -> None:
 _settings: dict[str, callable] = {"my_option": _set_my_option}
 ```
 
-The `set` command is built into `Runner` and dispatches to handlers collected from all modules. Handlers always receive raw string values.
+The `set` command is built into `Runner` and dispatches to handlers. Handlers always receive raw string values.
 
 5. If adding a new module, register it in the appropriate `commands/__init__.py`:
 
 ```python
 # Generic (protocol-independent) commands:
 # src/gpexp/app/generic/commands/__init__.py
-COMMAND_MODULES = [iso, session, state, my_module]
+COMMAND_MODULES = [iso, session, my_module]
 
 # GP-specific commands:
 # src/gpexp/app/gp/commands/__init__.py
-COMMAND_MODULES = [gp, state, my_module]
+COMMAND_MODULES = [gp, my_module]
 ```
 
 ### Using from scenario files (.gps)

@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import logging
+
 from gpexp.app.generic.commands import COMMAND_MODULES as GENERIC_MODULES
 from gpexp.app.generic.runner import Runner
 from gpexp.app.gp.cardinfo import GPCardInfo
 from gpexp.app.gp.commands import COMMAND_MODULES as GP_MODULES
 from gpexp.core.gp import GPTerminal
+
+lg = logging.getLogger(__name__)
 
 GP_DEFAULT_KEY = bytes.fromhex("404142434445464748494A4B4C4D4E4F")
 
@@ -18,3 +22,8 @@ class GPRunner(Runner):
         super().__init__(terminal, GENERIC_MODULES + GP_MODULES)
         self._info = GPCardInfo()
         self._key = GP_DEFAULT_KEY
+        self._settings["key"] = self._set_key
+
+    def _set_key(self, _runner, value: str) -> None:
+        self._key = bytes.fromhex(value)
+        lg.info("key set to %s", self._key.hex().upper())

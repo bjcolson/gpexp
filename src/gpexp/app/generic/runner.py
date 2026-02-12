@@ -75,7 +75,9 @@ class Runner:
         self._descriptions: dict[str, str] = {}
         self._raw_commands: set[str] = set()
         self._hex_params: set[str] = set()
-        self._settings: dict[str, callable] = {}
+        self._settings: dict[str, callable] = {
+            "stop_on_error": self._set_stop_on_error,
+        }
         for mod in command_modules:
             for name in dir(mod):
                 if name.startswith("cmd_"):
@@ -97,6 +99,12 @@ class Runner:
 
         # 'set' is a raw command — handlers always receive strings
         self._raw_commands.add("set")
+
+    # --- Settings ---
+
+    def _set_stop_on_error(self, _runner, value: str) -> None:
+        self._stop_on_error = value.lower() in ("true", "yes", "1")
+        lg.info("stop_on_error = %s", self._stop_on_error)
 
     # --- Commands ---
 

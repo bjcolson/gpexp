@@ -27,9 +27,8 @@ Commands are `cmd_*` functions organized in modules under `src/gpexp/app/gp/comm
 | `iso.py` | ISO 7816 generic file and data commands |
 | `gp.py` | GlobalPlatform commands |
 | `session.py` | Session management and raw APDU |
-| `state.py` | Configuration |
 
-The `cmd_` prefix is stripped to form the command name. The first docstring line becomes the help text. The `help` command lives on `Runner` itself.
+The `cmd_` prefix is stripped to form the command name. The first docstring line becomes the help text. `help`, `set`, and `quit`/`exit` are built into `Runner` itself.
 
 ### ISO 7816 commands (`iso.py`)
 
@@ -71,16 +70,11 @@ Each command sends a single APDU.
 | `reconnect` | — | — | Disconnect and reconnect |
 | `apdu` | `apdu` or `cla`/`ins`/`p1`/`p2`/`data`/`le` | (user-defined) | Send a raw APDU |
 
-### State commands (`state.py`)
-
-| Command | Parameters | Description |
-|---------|-----------|-------------|
-| `set` | `key`, `stop_on_error` | Set runner configuration |
-
 ### Built-in
 
 | Command | Parameters | Description |
 |---------|-----------|-------------|
+| `set` | `key`, `stop_on_error` | Set runner configuration |
 | `help` | — | List available commands |
 | `quit` / `exit` | — | Exit the REPL |
 
