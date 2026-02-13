@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import inspect
 import logging
 from functools import partial
 try:
-    import readline  # noqa: F401 — enables line editing in input()
+    import readline
 except ImportError:
-    pass
+    readline = None  # type: ignore[assignment]
 import shlex
 from types import ModuleType
 
@@ -105,6 +106,16 @@ class Runner:
         # 'set' is a raw command — handlers always receive strings
         self._raw_commands.add("set")
 
+        # Build parameter map for tab completion
+        self._params: dict[str, list[str]] = {}
+        for mod in command_modules:
+            for name in dir(mod):
+                if name.startswith("cmd_"):
+                    sig = inspect.signature(getattr(mod, name))
+                    params = [p for p in sig.parameters if p != "runner"]
+                    if params:
+                        self._params[name[4:]] = params
+
     # --- Settings ---
 
     def _set_log(self, _runner, value: str) -> None:
@@ -171,12 +182,40 @@ class Runner:
             lg.error("command '%s' failed: %s", name, exc)
             return False
 
+    def _complete(self, text: str, state: int) -> str | None:
+        """Readline completer for command names and parameter names."""
+        if state == 0:
+            buf = readline.get_line_buffer()
+            parts = buf.lstrip().split()
+            # Complete command name (first word, or empty line)
+            if not parts or (len(parts) == 1 and not buf.endswith(" ")):
+                names = sorted(self._commands) + ["quit", "exit"]
+                self._matches = [n for n in names if n.startswith(text)]
+            else:
+                cmd = parts[0]
+                # After 'set' → complete setting names
+                if cmd == "set":
+                    candidates = [k + "=" for k in self._settings]
+                else:
+                    candidates = [p + "=" for p in self._params.get(cmd, [])]
+                # Exclude params already on the line
+                used = {p.split("=", 1)[0] for p in parts[1:]}
+                self._matches = [
+                    c for c in candidates
+                    if c.startswith(text) and c.split("=", 1)[0] not in used
+                ]
+        return self._matches[state] if state < len(self._matches) else None
+
     def _repl(self, prompt: str = "gpexp> ",
               exit_commands: set[str] = {"quit", "exit"}) -> str | None:
         """Run an interactive REPL.
 
         Returns the command name that caused the exit, or None on EOF/Ctrl-C.
         """
+        if readline is not None:
+            readline.set_completer(self._complete)
+            readline.set_completer_delims(" ")
+            readline.parse_and_bind("tab: complete")
         while True:
             try:
                 line = input(prompt)
