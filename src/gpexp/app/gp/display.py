@@ -68,8 +68,9 @@ _PRIVILEGES: list[tuple[int, int, str]] = [
     (1, 0x01, "Global Service"),
     # Byte 3
     (2, 0x80, "Receipt Generation"),
-    (2, 0x40, "Contactless Activation"),
-    (2, 0x20, "Contactless Self-Activation"),
+    (2, 0x40, "Ciphered Load File Data Block"),
+    (2, 0x20, "Contactless Activation"),
+    (2, 0x10, "Contactless Self-Activation"),
 ]
 
 _GP_OID_BASE = "1.2.840.114283"
@@ -182,6 +183,8 @@ def _format_entry(entry: AppEntry, states: dict[int, str]) -> str:
     privs = _decode_privileges(entry.privileges)
     if privs:
         line += f"\n    {', '.join(privs)}"
+    for mod in entry.executable_modules:
+        line += f"\n    {_hex(mod)}"
     return line
 
 

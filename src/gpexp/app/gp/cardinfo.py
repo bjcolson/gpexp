@@ -53,7 +53,7 @@ class AppEntry:
     lifecycle: int
     privileges: bytes = b""
     executable_load_file: bytes = b""
-    executable_module: bytes = b""
+    executable_modules: list[bytes] = field(default_factory=list)
     version: bytes = b""
     associated_sd: bytes = b""
 
@@ -171,7 +171,7 @@ def parse_status(nodes: list[TLV]) -> list[AppEntry]:
         lc_tlv = node.find(0x9F70)
         priv_tlv = node.find(0xC5)
         elf_tlv = node.find(0xC4)
-        mod_tlv = node.find(0x84)
+        modules = [child.value for child in node.children if child.tag == 0x84]
         ver_tlv = node.find(0xCE)
         sd_tlv = node.find(0xCC)
         entries.append(AppEntry(
@@ -179,7 +179,7 @@ def parse_status(nodes: list[TLV]) -> list[AppEntry]:
             lifecycle=lc_tlv.value[0] if lc_tlv and lc_tlv.value else 0,
             privileges=priv_tlv.value if priv_tlv else b"",
             executable_load_file=elf_tlv.value if elf_tlv else b"",
-            executable_module=mod_tlv.value if mod_tlv else b"",
+            executable_modules=modules,
             version=ver_tlv.value if ver_tlv else b"",
             associated_sd=sd_tlv.value if sd_tlv else b"",
         ))
