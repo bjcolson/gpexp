@@ -30,14 +30,27 @@ _KEY_TYPES: dict[int, str] = {
 }
 
 _AID_NAMES: dict[bytes, str] = {
+    # Java Card platform packages (RID A000000062)
     bytes.fromhex("A0000000620001"): "java.lang",
+    bytes.fromhex("A0000000620002"): "java.io",
+    bytes.fromhex("A0000000620003"): "java.rmi",
     bytes.fromhex("A0000000620101"): "javacard.framework",
-    bytes.fromhex("A0000000620102"): "javacard.framework.service",
-    bytes.fromhex("A0000000620201"): "javacard.security",
-    bytes.fromhex("A0000000620202"): "javacardx.crypto",
-    bytes.fromhex("A0000000620203"): "javacardx.biometry",
-    bytes.fromhex("A0000000620204"): "javacardx.external",
-    bytes.fromhex("A0000000620206"): "javacardx.security",
+    bytes.fromhex("A000000062010101"): "javacard.framework.service",
+    bytes.fromhex("A0000000620102"): "javacard.security",
+    bytes.fromhex("A0000000620201"): "javacardx.crypto",
+    bytes.fromhex("A0000000620202"): "javacardx.biometry",
+    bytes.fromhex("A0000000620203"): "javacardx.external",
+    bytes.fromhex("A0000000620204"): "javacardx.biometry1toN",
+    bytes.fromhex("A0000000620205"): "javacardx.security",
+    bytes.fromhex("A000000062020801"): "javacardx.framework.util",
+    bytes.fromhex("A00000006202080101"): "javacardx.framework.util.intx",
+    bytes.fromhex("A000000062020802"): "javacardx.framework.math",
+    bytes.fromhex("A000000062020803"): "javacardx.framework.tlv",
+    bytes.fromhex("A000000062020804"): "javacardx.framework.string",
+    bytes.fromhex("A0000000620209"): "javacardx.apdu",
+    bytes.fromhex("A000000062020901"): "javacardx.apdu.util",
+    # GlobalPlatform (RID A000000151)
+    bytes.fromhex("A00000015100"): "org.globalplatform",
     bytes.fromhex("A0000001510000"): "org.globalplatform",
 }
 
