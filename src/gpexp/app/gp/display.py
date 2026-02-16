@@ -29,6 +29,18 @@ _KEY_TYPES: dict[int, str] = {
     0xFF: "Extended",
 }
 
+_AID_NAMES: dict[bytes, str] = {
+    bytes.fromhex("A0000000620001"): "java.lang",
+    bytes.fromhex("A0000000620101"): "javacard.framework",
+    bytes.fromhex("A0000000620102"): "javacard.framework.service",
+    bytes.fromhex("A0000000620201"): "javacard.security",
+    bytes.fromhex("A0000000620202"): "javacardx.crypto",
+    bytes.fromhex("A0000000620203"): "javacardx.biometry",
+    bytes.fromhex("A0000000620204"): "javacardx.external",
+    bytes.fromhex("A0000000620206"): "javacardx.security",
+    bytes.fromhex("A0000001510000"): "org.globalplatform",
+}
+
 _ISD_STATES: dict[int, str] = {
     0x01: "OP_READY",
     0x07: "INITIALIZED",
@@ -179,7 +191,9 @@ def format_card_recognition(oids: list[str]) -> str:
 def _format_entry(entry: AppEntry, states: dict[int, str]) -> str:
     aid = _hex(entry.aid)
     state = _state(entry.lifecycle, states)
-    line = f"  {aid:<48s}{state}"
+    name = _AID_NAMES.get(entry.aid)
+    label = f"{state}  {name}" if name else state
+    line = f"  {aid:<48s}{label}"
     privs = _decode_privileges(entry.privileges)
     if privs:
         line += f"\n    {', '.join(privs)}"
