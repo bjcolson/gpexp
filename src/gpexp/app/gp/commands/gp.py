@@ -15,6 +15,7 @@ from gpexp.app.gp.display import (
     format_contents,
     format_cplc,
     format_key_info,
+    parse_privileges,
 )
 from gpexp.core.gp import (
     C_MAC,
@@ -258,11 +259,16 @@ def cmd_install(
     params: str = "C900",
     selectable: str = "true",
 ) -> bool:
-    """Install an applet from a loaded package (INSTALL for install)."""
+    """Install an applet from a loaded package (INSTALL for install).
+
+    Privileges can be hex bytes (e.g. ``80C040``) or comma-separated
+    mnemonics (e.g. ``SD,TP,AM,CLFDB``).  Run ``help install`` for the
+    full list.
+    """
     package_aid = bytes.fromhex(package)
     module_aid = bytes.fromhex(module) if module else package_aid
     instance_aid = bytes.fromhex(instance) if instance else b""
-    priv = bytes.fromhex(privileges)
+    priv = parse_privileges(privileges)
     params_bytes = bytes.fromhex(params)
     make_sel = selectable.lower() in ("true", "yes", "1")
 

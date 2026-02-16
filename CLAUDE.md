@@ -48,6 +48,8 @@ Data-collecting commands (`probe`, `info_cplc`, `info_card_data`, `info_keys`, `
 
 The `load` command reads a CAP (ZIP) or IJC (raw binary) file via `capfile.read_load_file()`, then sends INSTALL [for load] + LOAD blocks. The `install` command sends INSTALL [for install and make selectable] and works independently — it can install from packages loaded in a prior session or by another tool. Both are raw commands (file paths and hex AIDs parsed manually).
 
+The `install` command's `privileges` parameter accepts raw hex bytes (e.g. `80C040`) or comma-separated symbolic mnemonics (e.g. `SD,TP,AM,CLFDB`). Parsing is handled by `parse_privileges()` in `display.py`. The mnemonic table is defined in `_PRIVILEGE_MNEMONICS`; the decoding table for display is `_PRIVILEGES`. Both live in `src/gpexp/app/gp/display.py`.
+
 The `delete` command sends DELETE (`80 E4`) with tag `4F` (AID) to remove a package or applet instance. Use `related=true` to cascade-delete a package and all its instances. Also a raw command (hex AID parsed manually).
 
 ## ELF upgrade (Amendment H)

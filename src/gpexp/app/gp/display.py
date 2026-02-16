@@ -98,6 +98,62 @@ _PRIVILEGES: list[tuple[int, int, str]] = [
     (2, 0x10, "Contactless Self-Activation"),
 ]
 
+# Short mnemonics for privilege names, used by parse_privileges().
+_PRIVILEGE_MNEMONICS: dict[str, tuple[int, int]] = {
+    "sd": (0, 0x80),
+    "dap": (0, 0x40),
+    "dm": (0, 0x20),
+    "lock": (0, 0x10),
+    "terminate": (0, 0x08),
+    "default": (0, 0x04),
+    "cvm": (0, 0x02),
+    "mdap": (0, 0x01),
+    "tp": (1, 0x80),
+    "am": (1, 0x40),
+    "tv": (1, 0x20),
+    "gdelete": (1, 0x10),
+    "glock": (1, 0x08),
+    "greg": (1, 0x04),
+    "final": (1, 0x02),
+    "gsvc": (1, 0x01),
+    "receipt": (2, 0x80),
+    "clfdb": (2, 0x40),
+    "clact": (2, 0x20),
+    "clsact": (2, 0x10),
+}
+
+
+def parse_privileges(value: str) -> bytes:
+    """Parse a privilege string — hex bytes or comma-separated mnemonics.
+
+    Hex example:   ``"80C040"``
+    Mnemonic example: ``"SD,TP,AM,CLFDB"``
+
+    Returns 1-byte if only byte-0 bits are set, otherwise 3-byte.
+    Raises ``ValueError`` on unknown mnemonics.
+    """
+    value = value.strip()
+    # If it looks like hex (even number of hex digits, no commas) treat it as raw.
+    if "," not in value:
+        try:
+            return bytes.fromhex(value)
+        except ValueError:
+            pass  # fall through to mnemonic parsing for a single name
+    priv = [0, 0, 0]
+    for token in value.split(","):
+        token = token.strip().lower()
+        if not token:
+            continue
+        if token not in _PRIVILEGE_MNEMONICS:
+            known = ", ".join(sorted(_PRIVILEGE_MNEMONICS))
+            raise ValueError(f"unknown privilege {token!r} (known: {known})")
+        byte_idx, mask = _PRIVILEGE_MNEMONICS[token]
+        priv[byte_idx] |= mask
+    # Compact: 1 byte if bytes 1-2 are zero, else 3 bytes.
+    if priv[1] or priv[2]:
+        return bytes(priv)
+    return bytes(priv[:1])
+
 _GP_OID_BASE = "1.2.840.114283"
 
 _GP_OID_NAMES: dict[str, str] = {

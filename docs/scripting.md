@@ -95,7 +95,7 @@ All commands return `True` on success, `False` on error.
 | `key_length` | `16` | Key length in bytes (decimal) |
 | `display` | `false` | Print collected results immediately |
 | `block_size` | `239` | LOAD block size in bytes (decimal) |
-| `privileges` | `00` | Application privileges (hex) |
+| `privileges` | `00` | Application privileges (hex or symbolic, see [privilege mnemonics](#privilege-mnemonics)) |
 | `params` | `C900` | Install parameters TLV (hex, `C900` = empty) |
 | `related` | `false` | Delete related objects (cascade) |
 | `selectable` | `true` | Make applet selectable on install |
@@ -335,6 +335,7 @@ Install an applet from a loaded package. Sends INSTALL [for install and make sel
 install package=A00000006203010C08 module=A00000006203010C0801
 install package=A00000006203010C08 module=A00000006203010C0801 instance=A00000006203010C0802
 install package=A00000006203010C08 module=A00000006203010C0801 privileges=04
+install package=A00000006203010C08 module=A00000006203010C0801 privileges=SD,TP,AM,CLFDB
 install package=A00000006203010C08 module=A00000006203010C0801 selectable=false
 ```
 
@@ -343,9 +344,38 @@ install package=A00000006203010C08 module=A00000006203010C0801 selectable=false
 | `package` | (required) | Executable load file AID (hex) |
 | `module` | same as `package` | Executable module AID (hex) |
 | `instance` | same as `module` | Application instance AID (hex) |
-| `privileges` | `00` | Application privileges (hex) |
+| `privileges` | `00` | Application privileges (hex or symbolic, see [privilege mnemonics](#privilege-mnemonics)) |
 | `params` | `C900` | Install parameters TLV (hex) — `C900` = empty |
 | `selectable` | `true` | Make the applet selectable (P1=`0C`); `false` uses P1=`04` |
+
+### Privilege mnemonics
+
+The `privileges` parameter accepts raw hex bytes (e.g. `80C040`) or comma-separated symbolic names. Names are case-insensitive.
+
+| Mnemonic | Privilege | Byte.Bit |
+|----------|-----------|----------|
+| `sd` | Security Domain | 0.7 |
+| `dap` | DAP Verification | 0.6 |
+| `dm` | Delegated Management | 0.5 |
+| `lock` | Card Lock | 0.4 |
+| `terminate` | Card Terminate | 0.3 |
+| `default` | Default Selected | 0.2 |
+| `cvm` | CVM Management | 0.1 |
+| `mdap` | Mandated DAP Verification | 0.0 |
+| `tp` | Trusted Path | 1.7 |
+| `am` | Authorized Management | 1.6 |
+| `tv` | Token Verification | 1.5 |
+| `gdelete` | Global Delete | 1.4 |
+| `glock` | Global Lock | 1.3 |
+| `greg` | Global Registry | 1.2 |
+| `final` | Final Application | 1.1 |
+| `gsvc` | Global Service | 1.0 |
+| `receipt` | Receipt Generation | 2.7 |
+| `clfdb` | Ciphered Load File Data Block | 2.6 |
+| `clact` | Contactless Activation | 2.5 |
+| `clsact` | Contactless Self-Activation | 2.4 |
+
+When only byte-0 privileges are used, a 1-byte encoding is produced. Otherwise a 3-byte encoding is used automatically.
 
 ## The `delete` command
 

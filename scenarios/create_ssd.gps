@@ -1,0 +1,30 @@
+# create_ssd.gps — create a Supplementary Security Domain
+#
+# Privileges use symbolic mnemonics (see the full list below).
+# You can also use raw hex, e.g. privileges=80C040.
+#
+# Mnemonics:
+#   sd       Security Domain          tp      Trusted Path
+#   dap      DAP Verification         am      Authorized Management
+#   dm       Delegated Management     tv      Token Verification
+#   lock     Card Lock                gdelete Global Delete
+#   terminate Card Terminate          glock   Global Lock
+#   default  Default Selected         greg    Global Registry
+#   cvm      CVM Management           final   Final Application
+#   mdap     Mandated DAP Verif.      gsvc    Global Service
+#   receipt  Receipt Generation       clfdb   Ciphered Load File Data Block
+#   clact    Contactless Activation   clsact  Contactless Self-Activation
+#
+# Adjust the AIDs below to match your SD package and target instance.
+
+probe
+auth
+
+# load SD package (if the card does not have a built-in SD module)
+# load file=path/to/sd_package.cap
+
+# install SSD with Security Domain + Trusted Path + Authorized Management
+# + Ciphered Load File Data Block
+install package=A00000015100 module=A00000015100 instance=A000000151535344 privileges=SD,TP,AM,CLFDB
+
+info_contents display=true
