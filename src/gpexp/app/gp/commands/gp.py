@@ -84,10 +84,12 @@ def _key_length_for_kvn(runner, kvn: int) -> int:
 
 
 def _derive_key(runner, kvn: int) -> StaticKeys:
-    """Derive a StaticKeys triple from runner._key sized for *kvn*."""
+    """Derive a StaticKeys triple from runner key settings sized for *kvn*."""
     key_len = _key_length_for_kvn(runner, kvn) if kvn else len(runner._key)
-    key = (runner._key * 2)[:key_len]
-    return StaticKeys(enc=key, mac=key, dek=key)
+    enc = ((runner._enc or runner._key) * 2)[:key_len]
+    mac = ((runner._mac or runner._key) * 2)[:key_len]
+    dek = ((runner._dek or runner._key) * 2)[:key_len]
+    return StaticKeys(enc=enc, mac=mac, dek=dek)
 
 
 # --- Commands ---
