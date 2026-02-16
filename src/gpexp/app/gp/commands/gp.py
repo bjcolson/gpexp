@@ -83,12 +83,22 @@ def _key_length_for_kvn(runner, kvn: int) -> int:
     return 16
 
 
+def _sized_key(key: bytes, key_len: int) -> bytes:
+    """Pad or trim *key* to *key_len* bytes."""
+    return (key * 2)[:key_len]
+
+
 def _derive_key(runner, kvn: int) -> StaticKeys:
-    """Derive a StaticKeys triple from runner key settings sized for *kvn*."""
+    """Derive a StaticKeys triple from runner key settings sized for *kvn*.
+
+    Explicitly set per-key overrides (enc/mac/dek) are used at their
+    original length.  The base key is padded/trimmed to match the card's
+    expected key length for the given KVN.
+    """
     key_len = _key_length_for_kvn(runner, kvn) if kvn else len(runner._key)
-    enc = ((runner._enc or runner._key) * 2)[:key_len]
-    mac = ((runner._mac or runner._key) * 2)[:key_len]
-    dek = ((runner._dek or runner._key) * 2)[:key_len]
+    enc = runner._enc if runner._enc is not None else _sized_key(runner._key, key_len)
+    mac = runner._mac if runner._mac is not None else _sized_key(runner._key, key_len)
+    dek = runner._dek if runner._dek is not None else _sized_key(runner._key, key_len)
     return StaticKeys(enc=enc, mac=mac, dek=dek)
 
 
