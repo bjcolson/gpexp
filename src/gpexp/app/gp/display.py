@@ -47,6 +47,31 @@ _PKG_STATES: dict[int, str] = {
     0x01: "LOADED",
 }
 
+_PRIVILEGES: list[tuple[int, int, str]] = [
+    # Byte 1
+    (0, 0x80, "Security Domain"),
+    (0, 0x40, "DAP Verification"),
+    (0, 0x20, "Delegated Management"),
+    (0, 0x10, "Card Lock"),
+    (0, 0x08, "Card Terminate"),
+    (0, 0x04, "Default Selected"),
+    (0, 0x02, "CVM Management"),
+    (0, 0x01, "Mandated DAP Verification"),
+    # Byte 2
+    (1, 0x80, "Trusted Path"),
+    (1, 0x40, "Authorized Management"),
+    (1, 0x20, "Token Verification"),
+    (1, 0x10, "Global Delete"),
+    (1, 0x08, "Global Lock"),
+    (1, 0x04, "Global Registry"),
+    (1, 0x02, "Final Application"),
+    (1, 0x01, "Global Service"),
+    # Byte 3
+    (2, 0x80, "Receipt Generation"),
+    (2, 0x40, "Contactless Activation"),
+    (2, 0x20, "Contactless Self-Activation"),
+]
+
 _GP_OID_BASE = "1.2.840.114283"
 
 _GP_OID_NAMES: dict[str, str] = {
@@ -80,6 +105,14 @@ def _key_type_str(key_type: int, key_length: int) -> str:
     name = _KEY_TYPES.get(key_type, f"{key_type:02X}")
     bits = key_length * 8
     return f"{name}-{bits}"
+
+
+def _decode_privileges(data: bytes) -> list[str]:
+    names: list[str] = []
+    for byte_idx, mask, label in _PRIVILEGES:
+        if byte_idx < len(data) and data[byte_idx] & mask:
+            names.append(label)
+    return names
 
 
 def _describe_oid(oid: str) -> str:
@@ -145,7 +178,11 @@ def format_card_recognition(oids: list[str]) -> str:
 def _format_entry(entry: AppEntry, states: dict[int, str]) -> str:
     aid = _hex(entry.aid)
     state = _state(entry.lifecycle, states)
-    return f"  {aid:<48s}{state}"
+    line = f"  {aid:<48s}{state}"
+    privs = _decode_privileges(entry.privileges)
+    if privs:
+        line += f"\n    {', '.join(privs)}"
+    return line
 
 
 # --- Composite formatters ---
