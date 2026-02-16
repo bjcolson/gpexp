@@ -77,7 +77,7 @@ Each command sends a single APDU.
 
 | Command | Parameters | Description |
 |---------|-----------|-------------|
-| `set` | `key`, `stop_on_error` | Set runner configuration |
+| `set` | `key`, `enc`, `mac`, `dek`, `stop_on_error` | Set runner configuration |
 | `help` | — | List available commands |
 | `quit` / `exit` | — | Exit the REPL |
 
@@ -91,7 +91,7 @@ All commands return `True` on success, `False` on error.
 | `kvn` | `00` | Key version number |
 | `level` | `01` (C-MAC) | Security level |
 | `new_kvn` | `30` | Target key version for PUT KEY |
-| `key_type` | `88` (AES) | Key type byte |
+| `key_type` | `88` (AES) | Key type byte — TODO: accept `des`/`aes` names and validate `key_length` against the type |
 | `key_length` | `16` | Key length in bytes (decimal) |
 | `display` | `false` | Print collected results immediately |
 | `block_size` | `239` | LOAD block size in bytes (decimal) |
@@ -198,8 +198,28 @@ set stop_on_error=false
 
 | Setting | Type | Default | Description |
 |---------|------|---------|-------------|
-| `key` | hex string | `404142434445464748494A4B4C4D4E4F` | Session key material (replicated across ENC/MAC/DEK) |
+| `key` | hex string | `404142434445464748494A4B4C4D4E4F` | Base key — used for ENC/MAC/DEK unless individually overridden. Clears any per-key overrides. |
+| `enc` | hex string | (uses `key`) | ENC key override |
+| `mac` | hex string | (uses `key`) | MAC key override |
+| `dek` | hex string | (uses `key`) | DEK key override |
 | `stop_on_error` | bool | `true` | Stop file execution on first error |
+
+When all three keys are the same, `set key=` is sufficient. When they differ, set them individually:
+
+```
+set enc=00112233445566778899AABBCCDDEEFF
+set mac=AABBCCDDEEFF00112233445566778899
+set dek=112233445566778899AABBCCDDEEFF00
+auth
+```
+
+You can also set a base key and override selectively — `set key=` resets all three overrides:
+
+```
+set key=00112233445566778899AABBCCDDEEFF
+set dek=FFEEDDCCBBAA99887766554433221100
+auth
+```
 
 ## The `select` command
 
