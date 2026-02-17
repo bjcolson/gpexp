@@ -35,6 +35,8 @@ from gpexp.core.gp.messages import (
     ManageUpgradeResult,
     PutKeyMessage,
     PutKeyResult,
+    SetStatusMessage,
+    SetStatusResult,
 )
 from gpexp.core.gp.protocol import GP
 from gpexp.core.gp.security import C_DECRYPTION, C_MAC, R_ENCRYPTION, R_MAC, StaticKeys
@@ -65,6 +67,8 @@ __all__ = [
     "ManageUpgradeResult",
     "PutKeyMessage",
     "PutKeyResult",
+    "SetStatusMessage",
+    "SetStatusResult",
     "R_ENCRYPTION",
     "R_MAC",
     "StaticKeys",

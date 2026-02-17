@@ -1,0 +1,63 @@
+# provision_ssd.gps — create an SSD, provision keys, and load a test applet
+#
+# Workflow:
+#   1. Authenticate to the ISD
+#   2. Delete any previous applet, package, and SSD instance (ignore errors)
+#   3. Create the SSD via INSTALL [for install]
+#   4. Reconnect to clear the ISD secure channel
+#   5. Select the SSD
+#   6. Authenticate to the SSD (default GP test keys)
+#   7. Put a new key set onto the SSD
+#   8. Set SSD lifecycle to PERSONALIZED
+#   9. Load the test applet under the SSD (plaintext, no CLFDB encryption)
+#  10. Install the applet
+#
+# AIDs:
+#   SSD package (ELF):  A0000001515350
+#   SSD module:         A000000151535041
+#   SSD instance:       A000000151535344  (arbitrary, must be unique)
+#   Test applet pkg:    D000CAFE0001
+#   Test applet module: D000CAFE000101
+#
+# The SSD is created with SD + Trusted Path + Authorized Management +
+# Ciphered Load File Data Block privileges.  Adjust as needed.
+
+# --- Step 1: authenticate to ISD ---
+probe
+auth
+
+# --- Step 2: clean up previous installs (may not exist) ---
+set stop_on_error=false
+delete aid=D000CAFE000101
+delete aid=D000CAFE0001
+delete aid=A000000151535344
+set stop_on_error=true
+
+# --- Step 3: create the SSD ---
+install package=A0000001515350 module=A000000151535041 instance=A000000151535344 privileges=SD,TP,AM,CLFDB params=C90481020370
+info_contents display=true
+
+# --- Step 4: reconnect (drops ISD secure channel) ---
+reconnect
+
+# --- Step 5: select the SSD ---
+select aid=A000000151535344
+
+# --- Step 6: authenticate to the SSD (default test keys) ---
+auth
+
+# --- Step 7: provision a new key set on the SSD ---
+put_keys new_kvn=30
+info_keys display=true
+
+# --- Step 8: set SSD lifecycle to PERSONALIZED ---
+set_status scope=40 state=0F aid=A000000151535344
+
+# --- Step 9: reconnect, auth to ISD, load applet under the SSD ---
+# Loading requires the ISD (AM privilege, not DM), with sd= naming the SSD.
+reconnect
+probe
+auth
+load file=data/HelloWorldApplet.cap sd=A000000151535344
+install package=D000CAFE0001 module=D000CAFE000101
+info_contents display=true

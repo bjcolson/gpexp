@@ -100,6 +100,11 @@ class GP:
         apdu = APDU(cla=0x80, ins=0xEA, p1=p1, p2=0x00, data=data, le=0x00)
         return self._send(f"MANAGE ELF UPGRADE P1={p1:02X}", apdu)
 
+    def send_set_status(self, scope: int, status: int, aid: bytes = b"") -> Response:
+        """SET STATUS (80 F0)."""
+        apdu = APDU(cla=0x80, ins=0xF0, p1=scope, p2=status, data=aid)
+        return self._send(f"SET STATUS scope={scope:02X} status={status:02X}", apdu)
+
     def send_install(self, p1: int, p2: int, data: bytes) -> Response:
         """INSTALL (80 E6)."""
         apdu = APDU(cla=0x80, ins=0xE6, p1=p1, p2=p2, data=data)

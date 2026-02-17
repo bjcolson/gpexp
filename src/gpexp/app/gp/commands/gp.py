@@ -39,6 +39,7 @@ from gpexp.core.gp import (
     LoadMessage,
     ManageUpgradeMessage,
     PutKeyMessage,
+    SetStatusMessage,
     StaticKeys,
 )
 from gpexp.core.gp.capfile import read_load_file
@@ -46,7 +47,7 @@ from gpexp.core.gp.capfile import read_load_file
 lg = logging.getLogger(__name__)
 
 # Commands that receive raw string kwargs (no conversion).
-_raw_commands: set[str] = {"load", "install", "delete", "upgrade", "upgrade_resume"}
+_raw_commands: set[str] = {"load", "install", "delete", "set_status", "upgrade", "upgrade_resume"}
 
 # Parameter names always parsed as hex.
 _hex_params: set[str] = {"kvn", "new_kvn", "key_type", "key_length", "level"}
@@ -203,6 +204,21 @@ def cmd_delete_keys(runner, *, kvn: int) -> bool:
         lg.info("DELETE KEY success: removed KVN %02X", kvn)
         return True
     lg.error("DELETE KEY failed: SW=%04X", result.sw)
+    return False
+
+
+def cmd_set_status(runner, *, scope: str = "80", state: str = "0F", aid: str = "") -> bool:
+    """SET STATUS — change lifecycle state (scope=80 ISD/40 app/SD, state=lifecycle)."""
+    scope_int = int(scope, 16)
+    state_int = int(state, 16)
+    aid_bytes = bytes.fromhex(aid) if aid else b""
+    result = runner._terminal.send(
+        SetStatusMessage(scope=scope_int, status=state_int, aid=aid_bytes)
+    )
+    if result.success:
+        lg.info("SET STATUS success: scope=%02X state=%02X", scope_int, state_int)
+        return True
+    lg.error("SET STATUS failed: SW=%04X", result.sw)
     return False
 
 

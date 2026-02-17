@@ -59,4 +59,7 @@ set stop_on_error=true
 # install SSD: GP standard package + module, custom instance AID
 install package=A0000001515350 module=A000000151535041 instance=A000000151535344 privileges=SD,TP,AM,CLFDB params=C90481020370
 
+# install parametrs for tp  no CLFDB, no C9 params
+# install package=A0000001515350 module=A000000151535041 instance=A000000151535344 privileges=SD,TP,AM
+
 info_contents display=true

@@ -166,6 +166,21 @@ class InstallResult(Result):
 
 
 @dataclass
+class SetStatusMessage(Message):
+    """SET STATUS (80 F0) — change lifecycle state."""
+
+    scope: int
+    status: int
+    aid: bytes = b""
+
+
+@dataclass
+class SetStatusResult(Result):
+    success: bool
+    sw: int
+
+
+@dataclass
 class ManageUpgradeMessage(Message):
     """MANAGE ELF UPGRADE (80 EA)."""
 

@@ -29,6 +29,8 @@ from gpexp.core.gp.messages import (
     ManageUpgradeMessage,
     ManageUpgradeResult,
     PutKeyMessage,
+    SetStatusMessage,
+    SetStatusResult,
     PutKeyResult,
 )
 from gpexp.core.gp.protocol import GP
@@ -239,6 +241,11 @@ class GPTerminal(GenericTerminal):
     def _delete_key(self, message: DeleteKeyMessage) -> DeleteKeyResult:
         resp = self._gp.send_delete_key(message.key_version)
         return DeleteKeyResult(success=resp.success, sw=resp.sw)
+
+    @handles(SetStatusMessage)
+    def _set_status(self, message: SetStatusMessage) -> SetStatusResult:
+        resp = self._gp.send_set_status(message.scope, message.status, message.aid)
+        return SetStatusResult(success=resp.success, sw=resp.sw)
 
     @handles(DeleteMessage)
     def _delete(self, message: DeleteMessage) -> DeleteResult:
