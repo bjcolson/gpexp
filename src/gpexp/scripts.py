@@ -23,7 +23,7 @@ from gpexp.core.smartcard.logging import PROTOCOL, TRACE
     "-r",
     "--runner",
     "runner",
-    type=click.Choice(["gp", "generic"]),
+    type=click.Choice(["gp", "generic", "template"]),
     default="gp",
     help="Runner type (default: gp).",
 )

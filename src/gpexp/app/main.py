@@ -4,13 +4,14 @@
 
 import logging
 
-from gpexp.app import generic, gp
+from gpexp.app import generic, gp, template
 
 lg = logging.getLogger(__name__)
 
 _SESSIONS = {
     "generic": generic.session,
     "gp": gp.session,
+    "template": template.session,
 }
 
 
