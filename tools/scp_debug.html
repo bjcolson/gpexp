@@ -1,0 +1,963 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SCP02 / SCP03 Debug</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: #1a1a2e; color: #e0e0e0; padding: 20px; }
+.container { max-width: 900px; margin: 0 auto; }
+h1 { text-align: center; margin-bottom: 24px; color: #e0e0e0; font-size: 1.3em; }
+.form { background: #16213e; border-radius: 8px; padding: 20px; margin-bottom: 20px; }
+.row { display: flex; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
+.field { flex: 1; min-width: 200px; }
+.field.full { flex-basis: 100%; }
+label { display: block; font-size: 0.82em; color: #a0a0c0; margin-bottom: 4px; font-weight: 500; }
+input, select { width: 100%; padding: 8px 10px; border: 1px solid #2a2a4a;
+  border-radius: 4px; background: #0f0f23; color: #e0e0e0; font-family: 'SF Mono',
+  'Fira Code', 'Cascadia Code', monospace; font-size: 0.9em; }
+input:focus, select:focus { outline: none; border-color: #4a6fa5; }
+input::placeholder { color: #555; }
+select { cursor: pointer; }
+.actions { display: flex; gap: 12px; align-items: center; }
+button { padding: 9px 28px; border: none; border-radius: 4px; cursor: pointer;
+  font-size: 0.9em; font-weight: 600; }
+#computeBtn { background: #4a6fa5; color: #fff; }
+#computeBtn:hover { background: #5a8fcf; }
+#clearBtn { background: #333; color: #ccc; }
+#clearBtn:hover { background: #444; }
+#selfTestBtn { background: #2a4a3a; color: #8fbc8f; font-size: 0.8em; padding: 7px 14px; }
+#selfTestBtn:hover { background: #3a5a4a; }
+.status { margin-left: 12px; font-size: 0.85em; }
+.status.ok { color: #6fbf6f; }
+.status.err { color: #ff6b6b; }
+#output { background: #0f0f23; border: 1px solid #2a2a4a; border-radius: 8px;
+  padding: 16px 20px; font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+  font-size: 0.82em; line-height: 1.55; white-space: pre-wrap; word-break: break-all;
+  min-height: 60px; display: none; overflow-x: auto; }
+.h { color: #6fbfff; font-weight: bold; }
+.s { color: #c0c060; }
+.v { color: #e0e0e0; }
+.l { color: #888; }
+.ok { color: #6fbf6f; font-weight: bold; }
+.fail { color: #ff6b6b; font-weight: bold; }
+.sep { color: #444; }
+.note { display: block; margin-top: 4px; font-size: 0.78em; color: #666; }
+.scp02-only { transition: opacity 0.2s; }
+</style>
+</head>
+<body>
+<div class="container">
+<h1>SCP02 / SCP03 Session Key Derivation Debugger</h1>
+<div class="form">
+  <div class="row">
+    <div class="field">
+      <label>Protocol</label>
+      <select id="scpVersion" onchange="toggleScp()">
+        <option value="auto">Auto-detect from response</option>
+        <option value="scp02">SCP02 (3DES)</option>
+        <option value="scp03">SCP03 (AES)</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Security Level</label>
+      <input id="secLevel" value="01" placeholder="e.g. 01, 03, 33">
+      <span class="note">01=C-MAC, 03=C-MAC+C-DEC, 33=C-MAC+C-DEC+R-MAC+R-ENC</span>
+    </div>
+    <div class="field scp02-only">
+      <label>i parameter (SCP02 only)</label>
+      <input id="iParam" value="15" placeholder="e.g. 15">
+      <span class="note">Default 15: modified APDU + ICV encryption + R-MAC</span>
+    </div>
+  </div>
+  <div class="row">
+    <div class="field"><label>ENC Key (hex)</label>
+      <input id="encKey" placeholder="404142434445464748494A4B4C4D4E4F"></div>
+    <div class="field"><label>MAC Key (hex)</label>
+      <input id="macKey" placeholder="404142434445464748494A4B4C4D4E4F"></div>
+    <div class="field"><label>DEK Key (hex, optional)</label>
+      <input id="dekKey" placeholder="404142434445464748494A4B4C4D4E4F"></div>
+  </div>
+  <div class="row">
+    <div class="field"><label>Host Challenge (8 bytes hex)</label>
+      <input id="hostChallenge" placeholder="A0A1A2A3A4A5A6A7"></div>
+  </div>
+  <div class="row">
+    <div class="field full"><label>INITIALIZE UPDATE Response Data (hex)</label>
+      <input id="initUpdateResp" placeholder="Full response data (28+ bytes SCP02, 29+ bytes SCP03)"></div>
+  </div>
+  <div class="actions">
+    <button id="computeBtn" onclick="compute()">Compute</button>
+    <button id="clearBtn" onclick="clearOutput()">Clear</button>
+    <button id="selfTestBtn" onclick="selfTest()">Self-test</button>
+    <span id="status" class="status"></span>
+  </div>
+</div>
+<pre id="output"></pre>
+</div>
+
+<script>
+'use strict';
+
+// ===========================================================================
+// Utility
+// ===========================================================================
+
+function parseHex(s) {
+  s = s.replace(/[\s:\-]/g, '');
+  if (s.startsWith('0x') || s.startsWith('0X')) s = s.slice(2);
+  if (s.length % 2 !== 0) throw new Error('Odd-length hex string');
+  if (!/^[0-9a-fA-F]*$/.test(s)) throw new Error('Invalid hex characters');
+  const bytes = [];
+  for (let i = 0; i < s.length; i += 2)
+    bytes.push(parseInt(s.substr(i, 2), 16));
+  return bytes;
+}
+
+function toHex(bytes) {
+  return bytes.map(b => ('0' + (b & 0xff).toString(16)).slice(-2).toUpperCase()).join('');
+}
+
+function toHexSpaced(bytes) {
+  return bytes.map(b => ('0' + (b & 0xff).toString(16)).slice(-2).toUpperCase()).join(' ');
+}
+
+function xorBytes(a, b) {
+  const r = [];
+  for (let i = 0; i < a.length; i++) r.push(a[i] ^ b[i]);
+  return r;
+}
+
+function pad80(data, bs) {
+  const r = data.slice();
+  r.push(0x80);
+  while (r.length % bs !== 0) r.push(0x00);
+  return r;
+}
+
+function zeros(n) { return new Array(n).fill(0); }
+
+// ===========================================================================
+// DES / 3DES
+// ===========================================================================
+
+const DES_IP = [
+  58,50,42,34,26,18,10,2,60,52,44,36,28,20,12,4,
+  62,54,46,38,30,22,14,6,64,56,48,40,32,24,16,8,
+  57,49,41,33,25,17, 9,1,59,51,43,35,27,19,11,3,
+  61,53,45,37,29,21,13,5,63,55,47,39,31,23,15,7
+];
+const DES_FP = [
+  40, 8,48,16,56,24,64,32,39, 7,47,15,55,23,63,31,
+  38, 6,46,14,54,22,62,30,37, 5,45,13,53,21,61,29,
+  36, 4,44,12,52,20,60,28,35, 3,43,11,51,19,59,27,
+  34, 2,42,10,50,18,58,26,33, 1,41, 9,49,17,57,25
+];
+const DES_E = [
+  32, 1, 2, 3, 4, 5, 4, 5, 6, 7, 8, 9,
+   8, 9,10,11,12,13,12,13,14,15,16,17,
+  16,17,18,19,20,21,20,21,22,23,24,25,
+  24,25,26,27,28,29,28,29,30,31,32, 1
+];
+const DES_P = [
+  16, 7,20,21,29,12,28,17, 1,15,23,26, 5,18,31,10,
+   2, 8,24,14,32,27, 3, 9,19,13,30, 6,22,11, 4,25
+];
+const DES_S = [
+  [14,4,13,1,2,15,11,8,3,10,6,12,5,9,0,7,0,15,7,4,14,2,13,1,10,6,12,11,9,5,3,8,
+   4,1,14,8,13,6,2,11,15,12,9,7,3,10,5,0,15,12,8,2,4,9,1,7,5,11,3,14,10,0,6,13],
+  [15,1,8,14,6,11,3,4,9,7,2,13,12,0,5,10,3,13,4,7,15,2,8,14,12,0,1,10,6,9,11,5,
+   0,14,7,11,10,4,13,1,5,8,12,6,9,3,2,15,13,8,10,1,3,15,4,2,11,6,7,12,0,5,14,9],
+  [10,0,9,14,6,3,15,5,1,13,12,7,11,4,2,8,13,7,0,9,3,4,6,10,2,8,5,14,12,11,15,1,
+   13,6,4,9,8,15,3,0,11,1,2,12,5,10,14,7,1,10,13,0,6,9,8,7,4,15,14,3,11,5,2,12],
+  [7,13,14,3,0,6,9,10,1,2,8,5,11,12,4,15,13,8,11,5,6,15,0,3,4,7,2,12,1,10,14,9,
+   10,6,9,0,12,11,7,13,15,1,3,14,5,2,8,4,3,15,0,6,10,1,13,8,9,4,5,11,12,7,2,14],
+  [2,12,4,1,7,10,11,6,8,5,3,15,13,0,14,9,14,11,2,12,4,7,13,1,5,0,15,10,3,9,8,6,
+   4,2,1,11,10,13,7,8,15,9,12,5,6,3,0,14,11,8,12,7,1,14,2,13,6,15,0,9,10,4,5,3],
+  [12,1,10,15,9,2,6,8,0,13,3,4,14,7,5,11,10,15,4,2,7,12,9,5,6,1,13,14,0,11,3,8,
+   9,14,15,5,2,8,12,3,7,0,4,10,1,13,11,6,4,3,2,12,9,5,15,10,11,14,1,7,6,0,8,13],
+  [4,11,2,14,15,0,8,13,3,12,9,7,5,10,6,1,13,0,11,7,4,9,1,10,14,3,5,12,2,15,8,6,
+   1,4,11,13,12,3,7,14,10,15,6,8,0,5,9,2,6,11,13,8,1,4,10,7,9,5,0,15,14,2,3,12],
+  [13,2,8,4,6,15,11,1,10,9,3,14,5,0,12,7,1,15,13,8,10,3,7,4,12,5,6,2,0,14,9,11,
+   7,11,4,1,9,12,14,2,0,6,10,13,15,3,5,8,2,1,14,7,4,10,8,13,15,12,9,0,3,5,6,11]
+];
+const DES_PC1 = [
+  57,49,41,33,25,17, 9, 1,58,50,42,34,26,18,
+  10, 2,59,51,43,35,27,19,11, 3,60,52,44,36,
+  63,55,47,39,31,23,15, 7,62,54,46,38,30,22,
+  14, 6,61,53,45,37,29,21,13, 5,28,20,12, 4
+];
+const DES_PC2 = [
+  14,17,11,24, 1, 5, 3,28,15, 6,21,10,
+  23,19,12, 4,26, 8,16, 7,27,20,13, 2,
+  41,52,31,37,47,55,30,40,51,45,33,48,
+  44,49,39,56,34,53,46,42,50,36,29,32
+];
+const DES_SHIFTS = [1,1,2,2,2,2,2,2,1,2,2,2,2,2,2,1];
+
+function bytesToBits(bytes) {
+  const bits = [];
+  for (let i = 0; i < bytes.length; i++)
+    for (let j = 7; j >= 0; j--)
+      bits.push((bytes[i] >> j) & 1);
+  return bits;
+}
+
+function bitsToBytes(bits) {
+  const bytes = [];
+  for (let i = 0; i < bits.length; i += 8) {
+    let b = 0;
+    for (let j = 0; j < 8; j++) b = (b << 1) | bits[i + j];
+    bytes.push(b);
+  }
+  return bytes;
+}
+
+function permute(bits, table) {
+  return table.map(i => bits[i - 1]);
+}
+
+function leftShift(bits, n) {
+  return bits.slice(n).concat(bits.slice(0, n));
+}
+
+function desKeySchedule(keyBits56) {
+  let C = keyBits56.slice(0, 28);
+  let D = keyBits56.slice(28, 56);
+  const subkeys = [];
+  for (let i = 0; i < 16; i++) {
+    C = leftShift(C, DES_SHIFTS[i]);
+    D = leftShift(D, DES_SHIFTS[i]);
+    subkeys.push(permute(C.concat(D), DES_PC2));
+  }
+  return subkeys;
+}
+
+function desFeistel(R, subkey) {
+  const expanded = permute(R, DES_E);
+  const xored = expanded.map((b, i) => b ^ subkey[i]);
+  // S-box substitution: 48 bits -> 32 bits
+  const sOut = [];
+  for (let i = 0; i < 8; i++) {
+    const offset = i * 6;
+    const row = (xored[offset] << 1) | xored[offset + 5];
+    const col = (xored[offset+1]<<3) | (xored[offset+2]<<2) | (xored[offset+3]<<1) | xored[offset+4];
+    const val = DES_S[i][row * 16 + col];
+    sOut.push((val >> 3) & 1, (val >> 2) & 1, (val >> 1) & 1, val & 1);
+  }
+  return permute(sOut, DES_P);
+}
+
+function desProcessBlock(key8, block8, encrypt) {
+  const keyBits = bytesToBits(key8);
+  const dataBits = bytesToBits(block8);
+  const keyBits56 = permute(keyBits, DES_PC1);
+  const subkeys = desKeySchedule(keyBits56);
+  if (!encrypt) subkeys.reverse();
+  const ip = permute(dataBits, DES_IP);
+  let L = ip.slice(0, 32);
+  let R = ip.slice(32, 64);
+  for (let i = 0; i < 16; i++) {
+    const f = desFeistel(R, subkeys[i]);
+    const newR = L.map((b, j) => b ^ f[j]);
+    L = R;
+    R = newR;
+  }
+  return bitsToBytes(permute(R.concat(L), DES_FP));
+}
+
+function desEncrypt(key8, block8) { return desProcessBlock(key8, block8, true); }
+function desDecrypt(key8, block8) { return desProcessBlock(key8, block8, false); }
+
+// 3DES with 24-byte key (K1, K2, K3)
+function tdesEncrypt(key24, block8) {
+  const k1 = key24.slice(0, 8), k2 = key24.slice(8, 16), k3 = key24.slice(16, 24);
+  return desEncrypt(k3, desDecrypt(k2, desEncrypt(k1, block8)));
+}
+
+// 2-key 3DES: 16-byte key -> 24-byte (K1, K2, K1)
+function tdesKey(key16) { return key16.concat(key16.slice(0, 8)); }
+
+function tdesEcb(key16, block8) { return tdesEncrypt(tdesKey(key16), block8); }
+
+// Single-DES using K1 of 2-key 3DES (for ICV encryption)
+function singleDesEcb(key16, block8) { return desEncrypt(key16.slice(0, 8), block8); }
+
+function tdesCbc(key16, iv, data) {
+  const key24 = tdesKey(key16);
+  const result = [];
+  let cv = iv.slice();
+  for (let i = 0; i < data.length; i += 8) {
+    const block = xorBytes(data.slice(i, i + 8), cv);
+    cv = tdesEncrypt(key24, block);
+    result.push(...cv);
+  }
+  return result;
+}
+
+// Full 3DES-CBC-MAC: all blocks with full 3DES, returns last 8 bytes
+function fullTdesMac(key16, icv, data) {
+  const padded = pad80(data, 8);
+  const ct = tdesCbc(key16, icv, padded);
+  return ct.slice(-8);
+}
+
+// ISO 9797-1 Algorithm 3 (Retail MAC): single-DES for blocks 1..n-1, full 3DES for block n
+function retailMac(key16, icv, data) {
+  const padded = pad80(data, 8);
+  const key24 = tdesKey(key16);
+  const k1_3 = key16.slice(0, 8).concat(key16.slice(0, 8), key16.slice(0, 8));
+  let cv = icv.slice();
+  const n = padded.length / 8;
+  for (let i = 0; i < n; i++) {
+    const block = xorBytes(padded.slice(i * 8, (i + 1) * 8), cv);
+    const k = (i === n - 1) ? key24 : k1_3;
+    cv = tdesEncrypt(k, block);
+  }
+  return cv;
+}
+
+// ===========================================================================
+// AES
+// ===========================================================================
+
+const AES_SBOX = [
+  0x63,0x7c,0x77,0x7b,0xf2,0x6b,0x6f,0xc5,0x30,0x01,0x67,0x2b,0xfe,0xd7,0xab,0x76,
+  0xca,0x82,0xc9,0x7d,0xfa,0x59,0x47,0xf0,0xad,0xd4,0xa2,0xaf,0x9c,0xa4,0x72,0xc0,
+  0xb7,0xfd,0x93,0x26,0x36,0x3f,0xf7,0xcc,0x34,0xa5,0xe5,0xf1,0x71,0xd8,0x31,0x15,
+  0x04,0xc7,0x23,0xc3,0x18,0x96,0x05,0x9a,0x07,0x12,0x80,0xe2,0xeb,0x27,0xb2,0x75,
+  0x09,0x83,0x2c,0x1a,0x1b,0x6e,0x5a,0xa0,0x52,0x3b,0xd6,0xb3,0x29,0xe3,0x2f,0x84,
+  0x53,0xd1,0x00,0xed,0x20,0xfc,0xb1,0x5b,0x6a,0xcb,0xbe,0x39,0x4a,0x4c,0x58,0xcf,
+  0xd0,0xef,0xaa,0xfb,0x43,0x4d,0x33,0x85,0x45,0xf9,0x02,0x7f,0x50,0x3c,0x9f,0xa8,
+  0x51,0xa3,0x40,0x8f,0x92,0x9d,0x38,0xf5,0xbc,0xb6,0xda,0x21,0x10,0xff,0xf3,0xd2,
+  0xcd,0x0c,0x13,0xec,0x5f,0x97,0x44,0x17,0xc4,0xa7,0x7e,0x3d,0x64,0x5d,0x19,0x73,
+  0x60,0x81,0x4f,0xdc,0x22,0x2a,0x90,0x88,0x46,0xee,0xb8,0x14,0xde,0x5e,0x0b,0xdb,
+  0xe0,0x32,0x3a,0x0a,0x49,0x06,0x24,0x5c,0xc2,0xd3,0xac,0x62,0x91,0x95,0xe4,0x79,
+  0xe7,0xc8,0x37,0x6d,0x8d,0xd5,0x4e,0xa9,0x6c,0x56,0xf4,0xea,0x65,0x7a,0xae,0x08,
+  0xba,0x78,0x25,0x2e,0x1c,0xa6,0xb4,0xc6,0xe8,0xdd,0x74,0x1f,0x4b,0xbd,0x8b,0x8a,
+  0x70,0x3e,0xb5,0x66,0x48,0x03,0xf6,0x0e,0x61,0x35,0x57,0xb9,0x86,0xc1,0x1d,0x9e,
+  0xe1,0xf8,0x98,0x11,0x69,0xd9,0x8e,0x94,0x9b,0x1e,0x87,0xe9,0xce,0x55,0x28,0xdf,
+  0x8c,0xa1,0x89,0x0d,0xbf,0xe6,0x42,0x68,0x41,0x99,0x2d,0x0f,0xb0,0x54,0xbb,0x16
+];
+
+const AES_RCON = [0x01,0x02,0x04,0x08,0x10,0x20,0x40,0x80,0x1b,0x36,0x6c,0xd8,0xab,0x4d];
+
+function aesXtime(a) { return ((a << 1) ^ ((a & 0x80) ? 0x1b : 0)) & 0xff; }
+
+function aesKeyExpansion(key) {
+  const Nk = key.length / 4;
+  const Nr = Nk + 6;
+  const totalWords = 4 * (Nr + 1);
+  // Each word is [b0, b1, b2, b3]
+  const w = [];
+  for (let i = 0; i < Nk; i++)
+    w.push(key.slice(i * 4, i * 4 + 4));
+  for (let i = Nk; i < totalWords; i++) {
+    let temp = w[i - 1].slice();
+    if (i % Nk === 0) {
+      temp = [AES_SBOX[temp[1]], AES_SBOX[temp[2]], AES_SBOX[temp[3]], AES_SBOX[temp[0]]];
+      temp[0] ^= AES_RCON[i / Nk - 1];
+    } else if (Nk > 6 && i % Nk === 4) {
+      temp = temp.map(b => AES_SBOX[b]);
+    }
+    w.push(w[i - Nk].map((b, j) => b ^ temp[j]));
+  }
+  return w;
+}
+
+function aesEncryptBlock(key, block) {
+  const Nk = key.length / 4;
+  const Nr = Nk + 6;
+  const w = aesKeyExpansion(key);
+  // State: s[row][col], loaded column-major
+  const s = [[0,0,0,0],[0,0,0,0],[0,0,0,0],[0,0,0,0]];
+  for (let c = 0; c < 4; c++)
+    for (let r = 0; r < 4; r++)
+      s[r][c] = block[c * 4 + r];
+  // AddRoundKey(0)
+  for (let c = 0; c < 4; c++)
+    for (let r = 0; r < 4; r++)
+      s[r][c] ^= w[c][r];
+  for (let round = 1; round <= Nr; round++) {
+    // SubBytes
+    for (let r = 0; r < 4; r++)
+      for (let c = 0; c < 4; c++)
+        s[r][c] = AES_SBOX[s[r][c]];
+    // ShiftRows
+    for (let r = 1; r < 4; r++) {
+      const row = s[r].slice();
+      for (let c = 0; c < 4; c++) s[r][c] = row[(c + r) % 4];
+    }
+    // MixColumns (skip on final round)
+    if (round < Nr) {
+      for (let c = 0; c < 4; c++) {
+        const a = [s[0][c], s[1][c], s[2][c], s[3][c]];
+        const b = a.map(aesXtime);
+        s[0][c] = b[0] ^ a[1] ^ b[1] ^ a[2] ^ a[3];
+        s[1][c] = a[0] ^ b[1] ^ a[2] ^ b[2] ^ a[3];
+        s[2][c] = a[0] ^ a[1] ^ b[2] ^ a[3] ^ b[3];
+        s[3][c] = a[0] ^ b[0] ^ a[1] ^ a[2] ^ b[3];
+      }
+    }
+    // AddRoundKey
+    for (let c = 0; c < 4; c++)
+      for (let r = 0; r < 4; r++)
+        s[r][c] ^= w[round * 4 + c][r];
+  }
+  const out = [];
+  for (let c = 0; c < 4; c++)
+    for (let r = 0; r < 4; r++)
+      out.push(s[r][c]);
+  return out;
+}
+
+// AES-CMAC (RFC 4493)
+function aesCmacSubkey(L) {
+  // Left-shift by 1 and conditionally XOR with Rb (0x87)
+  const shifted = [];
+  for (let i = 0; i < 16; i++)
+    shifted.push(((L[i] << 1) | (i < 15 ? (L[i + 1] >> 7) : 0)) & 0xff);
+  if (L[0] & 0x80) shifted[15] ^= 0x87;
+  return shifted;
+}
+
+function aesCmac(key, message) {
+  const L = aesEncryptBlock(key, zeros(16));
+  const K1 = aesCmacSubkey(L);
+  const K2 = aesCmacSubkey(K1);
+  const n = message.length === 0 ? 1 : Math.ceil(message.length / 16);
+  const lastComplete = message.length > 0 && message.length % 16 === 0;
+  // Prepare last block
+  let lastBlock;
+  const lastStart = (n - 1) * 16;
+  if (lastComplete) {
+    lastBlock = xorBytes(message.slice(lastStart, lastStart + 16), K1);
+  } else {
+    const partial = message.slice(lastStart);
+    const padded = pad80(partial, 16);
+    lastBlock = xorBytes(padded, K2);
+  }
+  let X = zeros(16);
+  for (let i = 0; i < n - 1; i++) {
+    X = aesEncryptBlock(key, xorBytes(X, message.slice(i * 16, i * 16 + 16)));
+  }
+  return aesEncryptBlock(key, xorBytes(X, lastBlock));
+}
+
+function aesCbcEncrypt(key, iv, data) {
+  const result = [];
+  let cv = iv.slice();
+  for (let i = 0; i < data.length; i += 16) {
+    cv = aesEncryptBlock(key, xorBytes(data.slice(i, i + 16), cv));
+    result.push(...cv);
+  }
+  return result;
+}
+
+// ===========================================================================
+// SCP03 KDF
+// ===========================================================================
+
+function scp03Kdf(key, constant, context, lengthBits) {
+  const lengthBytes = Math.ceil(lengthBits / 8);
+  const nBlocks = Math.ceil(lengthBytes / 16);
+  let result = [];
+  for (let counter = 1; counter <= nBlocks; counter++) {
+    const data = zeros(11).concat(
+      [constant, 0x00],
+      [(lengthBits >> 8) & 0xff, lengthBits & 0xff],
+      [counter],
+      context
+    );
+    result = result.concat(aesCmac(key, data));
+  }
+  return result.slice(0, lengthBytes);
+}
+
+// ===========================================================================
+// Output builder
+// ===========================================================================
+
+function O() { this.parts = []; }
+O.prototype.sep = function() { this.parts.push('<span class="sep">' + '='.repeat(72) + '</span>\n'); };
+O.prototype.header = function(t) { this.parts.push('<span class="h">' + esc(t) + '</span>\n'); };
+O.prototype.section = function(t) { this.parts.push('\n<span class="s">--- ' + esc(t) + ' ---</span>\n\n'); };
+O.prototype.line = function(label, value) {
+  this.parts.push('  <span class="l">' + esc(label.padEnd(20)) + '</span> <span class="v">' + esc(value) + '</span>\n');
+};
+O.prototype.text = function(t) { this.parts.push('  ' + esc(t) + '\n'); };
+O.prototype.blank = function() { this.parts.push('\n'); };
+O.prototype.match = function(label, ok) {
+  const cls = ok ? 'ok' : 'fail';
+  const txt = ok ? 'YES' : 'NO  *** MISMATCH ***';
+  this.parts.push('  <span class="l">' + esc(label.padEnd(20)) + '</span> <span class="' + cls + '">' + esc(txt) + '</span>\n');
+};
+O.prototype.result = function() { return this.parts.join(''); };
+function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+// ===========================================================================
+// SCP02 computation
+// ===========================================================================
+
+const SCP02_DERIV = [
+  ['S-ENC',  [0x01, 0x82], 'enc'],
+  ['S-MAC',  [0x01, 0x01], 'mac'],
+  ['S-RMAC', [0x01, 0x02], 'mac'],
+  ['S-DEK',  [0x01, 0x81], 'dek'],
+];
+
+function computeScp02(encKey, macKey, dekKey, hostChallenge, response, secLevel, iParam) {
+  const o = new O();
+  o.sep();
+  o.header('SCP02 Session Derivation Debug');
+  o.sep();
+
+  // Parse response
+  o.section('INITIALIZE UPDATE Response Parsing');
+  o.line('Raw response', toHex(response) + '  (' + response.length + ' bytes)');
+  if (response.length < 28) { o.text('ERROR: need >= 28 bytes, got ' + response.length); return o.result(); }
+
+  const keyDivData = response.slice(0, 10);
+  const keyInfo = response.slice(10, 12);
+  const seqCounter = response.slice(12, 14);
+  const cardChallenge = response.slice(14, 20);
+  const cardCryptogram = response.slice(20, 28);
+
+  o.line('Key div. data', toHex(keyDivData));
+  o.line('Key information', toHex(keyInfo) + '  (SCP' + ('0'+keyInfo[0].toString(16)).slice(-2).toUpperCase() + ', i=0x' + ('0'+keyInfo[1].toString(16)).slice(-2).toUpperCase() + ')');
+  o.line('Sequence counter', toHex(seqCounter));
+  o.line('Card challenge', toHex(cardChallenge));
+  o.line('Card cryptogram', toHex(cardCryptogram));
+
+  // Static keys
+  o.section('Static Keys');
+  o.line('ENC', toHex(encKey));
+  o.line('MAC', toHex(macKey));
+  o.line('DEK', dekKey.length ? toHex(dekKey) : '(not provided)');
+
+  // Input summary
+  o.section('Input Summary');
+  o.line('Host challenge', toHex(hostChallenge));
+  o.line('Sequence counter', toHex(seqCounter));
+  const flags = [];
+  if (secLevel & 0x01) flags.push('C-MAC');
+  if (secLevel & 0x02) flags.push('C-DEC');
+  if (secLevel & 0x10) flags.push('R-MAC');
+  if (secLevel & 0x20) flags.push('R-ENC');
+  o.line('Security level', '0x' + ('0'+secLevel.toString(16)).slice(-2).toUpperCase() +
+    (flags.length ? '  (' + flags.join(' | ') + ')' : ''));
+  o.line('i parameter', '0x' + ('0'+iParam.toString(16)).slice(-2).toUpperCase());
+
+  // Session key derivation
+  o.section('Session Key Derivation');
+  o.text('Algorithm: 3DES-CBC with zero ICV');
+  o.text('Derivation block = constant(2) || seq_counter(2) || 0x00 * 12');
+  o.blank();
+
+  const keysMap = { enc: encKey, mac: macKey, dek: dekKey };
+  const sessionKeys = {};
+  const zeroIcv = zeros(8);
+
+  for (const [name, constant, keyType] of SCP02_DERIV) {
+    const staticKey = keysMap[keyType];
+    if (name === 'S-DEK' && !staticKey.length) {
+      o.text(name + ': skipped (no DEK provided)');
+      o.blank();
+      continue;
+    }
+    const block = constant.concat(seqCounter, zeros(12));
+    const result = tdesCbc(staticKey, zeroIcv, block);
+    sessionKeys[name] = result;
+
+    o.text(name + ':');
+    o.line('  Static key', toHex(staticKey));
+    o.line('  Constant', toHex(constant));
+    o.line('  Derivation block', toHex(block));
+    o.line('  3DES-CBC result', toHex(result));
+    o.blank();
+  }
+
+  const sEnc = sessionKeys['S-ENC'];
+  const sMac = sessionKeys['S-MAC'];
+  const sRmac = sessionKeys['S-RMAC'];
+  const sDek = sessionKeys['S-DEK'] || [];
+
+  // Card cryptogram verification
+  o.section('Card Cryptogram Verification');
+  const cryptData = hostChallenge.concat(seqCounter, cardChallenge);
+  const paddedCrypt = pad80(cryptData, 8);
+  const expectedCardCrypt = fullTdesMac(sEnc, zeroIcv, cryptData);
+
+  o.text('Input:  host_challenge || seq_counter || card_challenge');
+  o.line('  Concatenated', toHex(cryptData));
+  o.line('  Padded (M2)', toHex(paddedCrypt));
+  o.line('  Key (S-ENC)', toHex(sEnc));
+  o.line('  ICV', toHex(zeroIcv));
+  o.text('Full 3DES-CBC-MAC (last 8 bytes of CBC output):');
+  o.line('  Computed', toHex(expectedCardCrypt));
+  o.line('  Received', toHex(cardCryptogram));
+  const match = toHex(expectedCardCrypt) === toHex(cardCryptogram);
+  o.match('  MATCH', match);
+
+  // Host cryptogram
+  o.section('Host Cryptogram Computation');
+  const hostData = seqCounter.concat(cardChallenge, hostChallenge);
+  const paddedHost = pad80(hostData, 8);
+  const hostCryptogram = fullTdesMac(sEnc, zeroIcv, hostData);
+
+  o.text('Input:  seq_counter || card_challenge || host_challenge');
+  o.line('  Concatenated', toHex(hostData));
+  o.line('  Padded (M2)', toHex(paddedHost));
+  o.line('  Key (S-ENC)', toHex(sEnc));
+  o.line('  ICV', toHex(zeroIcv));
+  o.line('  Host cryptogram', toHex(hostCryptogram));
+
+  // EXTERNAL AUTHENTICATE
+  o.section('EXTERNAL AUTHENTICATE APDU');
+  buildExtAuthScp02(o, sMac, hostCryptogram, secLevel, iParam);
+
+  // Summary
+  o.section('Session Keys Summary');
+  o.line('S-ENC', toHex(sEnc));
+  o.line('S-MAC', toHex(sMac));
+  o.line('S-RMAC', toHex(sRmac));
+  if (sDek.length) o.line('S-DEK', toHex(sDek));
+  o.blank();
+  return o.result();
+}
+
+function buildExtAuthScp02(o, sMac, hostCryptogram, secLevel, iParam) {
+  const cla = 0x84, ins = 0x82, p1 = secLevel, p2 = 0x00;
+  const data = hostCryptogram;
+  const icv = zeros(8);
+  const lcWithMac = data.length + 8;
+
+  let macInput;
+  if (iParam & 0x01) {
+    macInput = [cla, ins, p1, p2, lcWithMac].concat(data);
+    o.line('MAC mode', 'modified APDU (i_param bit 0 set)');
+  } else {
+    macInput = [cla, ins, p1, p2, data.length].concat(data);
+    o.line('MAC mode', 'unmodified APDU (i_param bit 0 clear)');
+  }
+  o.line('MAC input', toHex(macInput));
+  o.line('Padded (M2)', toHex(pad80(macInput, 8)));
+  o.line('Key (S-MAC)', toHex(sMac));
+  o.line('ICV', toHex(icv) + '  (first command, always zero)');
+
+  const cMac = retailMac(sMac, icv, macInput);
+  o.line('C-MAC', toHex(cMac));
+
+  const apduData = data.concat(cMac);
+  const apdu = [cla, ins, p1, p2, apduData.length].concat(apduData);
+  o.blank();
+  o.text('EXTERNAL AUTHENTICATE APDU:');
+  o.line('', toHexSpaced(apdu));
+}
+
+// ===========================================================================
+// SCP03 computation
+// ===========================================================================
+
+function computeScp03(encKey, macKey, dekKey, hostChallenge, response, secLevel) {
+  const o = new O();
+  o.sep();
+  o.header('SCP03 Session Derivation Debug');
+  o.sep();
+
+  // Parse response
+  o.section('INITIALIZE UPDATE Response Parsing');
+  o.line('Raw response', toHex(response) + '  (' + response.length + ' bytes)');
+  if (response.length < 29) { o.text('ERROR: need >= 29 bytes, got ' + response.length); return o.result(); }
+
+  const keyDivData = response.slice(0, 10);
+  const keyInfo = response.slice(10, 13);
+  const iParam = keyInfo[2];
+  const cardChallenge = response.slice(13, 21);
+  const cardCryptogram = response.slice(21, 29);
+
+  o.line('Key div. data', toHex(keyDivData));
+  o.line('Key information', toHex(keyInfo) +
+    '  (ver=0x' + ('0'+keyInfo[0].toString(16)).slice(-2).toUpperCase() +
+    ', SCP' + ('0'+keyInfo[1].toString(16)).slice(-2).toUpperCase() +
+    ', i=0x' + ('0'+iParam.toString(16)).slice(-2).toUpperCase() + ')');
+  o.line('Card challenge', toHex(cardChallenge));
+  o.line('Card cryptogram', toHex(cardCryptogram));
+
+  // Static keys
+  o.section('Static Keys');
+  o.line('ENC', toHex(encKey) + '  (' + (encKey.length * 8) + ' bits)');
+  o.line('MAC', toHex(macKey) + '  (' + (macKey.length * 8) + ' bits)');
+  o.line('DEK', dekKey.length ? toHex(dekKey) : '(not provided)');
+
+  // Input summary
+  o.section('Input Summary');
+  o.line('Host challenge', toHex(hostChallenge));
+  const context = hostChallenge.concat(cardChallenge);
+  o.text('KDF context:     host_challenge || card_challenge');
+  o.line('', toHex(context));
+  const keyBits = encKey.length * 8;
+  o.line('Output key length', keyBits + ' bits');
+  const flags = [];
+  if (secLevel & 0x01) flags.push('C-MAC');
+  if (secLevel & 0x02) flags.push('C-DEC');
+  if (secLevel & 0x10) flags.push('R-MAC');
+  if (secLevel & 0x20) flags.push('R-ENC');
+  o.line('Security level', '0x' + ('0'+secLevel.toString(16)).slice(-2).toUpperCase() +
+    (flags.length ? '  (' + flags.join(' | ') + ')' : ''));
+
+  // Session key derivation
+  o.section('Session Key Derivation (NIST SP 800-108 counter mode)');
+  o.text('KDF(key, constant, context, L):');
+  o.text('  derivation_data = 00*11 || constant || 00 || L(2) || counter || context(16)');
+  o.text('  output = AES-CMAC(key, derivation_data)');
+  const nBlocks = Math.ceil(encKey.length / 16);
+  if (nBlocks > 1) o.text('  (' + nBlocks + ' blocks needed for ' + keyBits + '-bit keys)');
+  o.blank();
+
+  const scpDerivs = [
+    ['S-ENC', 0x04, encKey],
+    ['S-MAC', 0x06, macKey],
+    ['S-RMAC', 0x07, macKey],
+  ];
+
+  const sessionKeys = {};
+  for (const [name, constant, staticKey] of scpDerivs) {
+    const lengthBytes = staticKey.length;
+    const nIter = Math.ceil(lengthBytes / 16);
+    let result = [];
+
+    o.text(name + ' (constant=0x' + ('0'+constant.toString(16)).slice(-2).toUpperCase() + '):');
+    o.line('  Static key', toHex(staticKey));
+
+    for (let counter = 1; counter <= nIter; counter++) {
+      const derivData = zeros(11).concat(
+        [constant, 0x00],
+        [(keyBits >> 8) & 0xff, keyBits & 0xff],
+        [counter],
+        context
+      );
+      const blockResult = aesCmac(staticKey, derivData);
+      result = result.concat(blockResult);
+
+      const label = nIter === 1 ? '' : ' (block ' + counter + ')';
+      o.line('  Derivation data' + label, toHex(derivData));
+      o.line('  AES-CMAC result' + label, toHex(blockResult));
+    }
+    const sessionKey = result.slice(0, lengthBytes);
+    sessionKeys[name] = sessionKey;
+    o.line('  Session key', toHex(sessionKey));
+    o.blank();
+  }
+
+  const sEnc = sessionKeys['S-ENC'];
+  const sMac = sessionKeys['S-MAC'];
+  const sRmac = sessionKeys['S-RMAC'];
+
+  // Card cryptogram verification
+  o.section('Card Cryptogram Verification');
+  o.text('KDF(S-MAC, constant=0x00, context, 64 bits)');
+  const derivDataCard = zeros(11).concat([0x00, 0x00, 0x00, 0x40, 0x01], context);
+  const fullResultCard = aesCmac(sMac, derivDataCard);
+  const expectedCardCrypt = fullResultCard.slice(0, 8);
+
+  o.line('Key (S-MAC)', toHex(sMac));
+  o.line('Derivation data', toHex(derivDataCard));
+  o.line('AES-CMAC output', toHex(fullResultCard));
+  o.line('Truncated to 8B', toHex(expectedCardCrypt));
+  o.line('Received', toHex(cardCryptogram));
+  const match = toHex(expectedCardCrypt) === toHex(cardCryptogram);
+  o.match('MATCH', match);
+
+  // Host cryptogram
+  o.section('Host Cryptogram Computation');
+  o.text('KDF(S-MAC, constant=0x01, context, 64 bits)');
+  const derivDataHost = zeros(11).concat([0x01, 0x00, 0x00, 0x40, 0x01], context);
+  const fullResultHost = aesCmac(sMac, derivDataHost);
+  const hostCryptogram = fullResultHost.slice(0, 8);
+
+  o.line('Key (S-MAC)', toHex(sMac));
+  o.line('Derivation data', toHex(derivDataHost));
+  o.line('AES-CMAC output', toHex(fullResultHost));
+  o.line('Host cryptogram', toHex(hostCryptogram));
+
+  // EXTERNAL AUTHENTICATE
+  o.section('EXTERNAL AUTHENTICATE APDU');
+  buildExtAuthScp03(o, sEnc, sMac, hostCryptogram, secLevel);
+
+  // Summary
+  o.section('Session Keys Summary');
+  o.line('S-ENC', toHex(sEnc));
+  o.line('S-MAC', toHex(sMac));
+  o.line('S-RMAC', toHex(sRmac));
+  if (dekKey.length) o.line('DEK', toHex(dekKey) + '  (static key passed through in SCP03)');
+  o.blank();
+  return o.result();
+}
+
+function buildExtAuthScp03(o, sEnc, sMac, hostCryptogram, secLevel) {
+  const cla = 0x84, ins = 0x82, p1 = secLevel, p2 = 0x00;
+  let data = hostCryptogram.slice();
+
+  // SCP03 encrypts EXTERNAL AUTHENTICATE data when C-DEC is active
+  if ((secLevel & 0x02) && data.length) {
+    o.text('C-DECRYPTION active: encrypting host cryptogram');
+    // Derive encryption ICV from counter (counter=1)
+    const counterBlock = zeros(15).concat([1]);
+    const encIcv = aesEncryptBlock(sEnc, counterBlock);
+    o.line('  Counter block', toHex(counterBlock));
+    o.line('  Enc ICV', toHex(encIcv));
+    const padded = pad80(data, 16);
+    o.line('  Padded data', toHex(padded));
+    data = aesCbcEncrypt(sEnc, encIcv, padded);
+    o.line('  Encrypted data', toHex(data));
+    o.blank();
+  }
+
+  const macChain = zeros(16);
+  const lcWithMac = data.length + 8;
+  const macInput = macChain.concat([cla, ins, p1, p2, lcWithMac], data);
+
+  o.line('MAC chaining', toHex(macChain) + '  (initial, all zeros)');
+  o.line('APDU header', toHex([cla, ins, p1, p2, lcWithMac]));
+  o.line('APDU data', toHex(data));
+  o.line('MAC input', toHex(macInput));
+  o.line('Key (S-MAC)', toHex(sMac));
+
+  const fullMac = aesCmac(sMac, macInput);
+  const cMac = fullMac.slice(0, 8);
+  o.line('AES-CMAC', toHex(fullMac));
+  o.line('C-MAC (8B)', toHex(cMac));
+
+  const apduData = data.concat(cMac);
+  const apdu = [cla, ins, p1, p2, apduData.length].concat(apduData);
+  o.blank();
+  o.text('EXTERNAL AUTHENTICATE APDU:');
+  o.line('', toHexSpaced(apdu));
+}
+
+// ===========================================================================
+// UI
+// ===========================================================================
+
+function toggleScp() {
+  const v = document.getElementById('scpVersion').value;
+  const showScp02 = v !== 'scp03';
+  document.querySelectorAll('.scp02-only').forEach(el => {
+    el.style.opacity = showScp02 ? '1' : '0.35';
+    el.querySelector('input').disabled = !showScp02;
+  });
+}
+
+function clearOutput() {
+  const el = document.getElementById('output');
+  el.style.display = 'none';
+  el.innerHTML = '';
+  document.getElementById('status').textContent = '';
+}
+
+function setStatus(msg, ok) {
+  const el = document.getElementById('status');
+  el.textContent = msg;
+  el.className = 'status ' + (ok ? 'ok' : 'err');
+}
+
+function compute() {
+  try {
+    let version = document.getElementById('scpVersion').value;
+    const encKey = parseHex(document.getElementById('encKey').value);
+    const macKey = parseHex(document.getElementById('macKey').value);
+    const dekVal = document.getElementById('dekKey').value.trim();
+    const dekKey = dekVal ? parseHex(dekVal) : [];
+    const hostChallenge = parseHex(document.getElementById('hostChallenge').value);
+    const response = parseHex(document.getElementById('initUpdateResp').value);
+    const secLevel = parseInt(document.getElementById('secLevel').value.trim(), 16);
+
+    if (hostChallenge.length !== 8) throw new Error('Host challenge must be 8 bytes');
+    if (isNaN(secLevel)) throw new Error('Invalid security level');
+
+    if (version === 'auto') {
+      if (response.length < 12) throw new Error('Response too short to auto-detect SCP version');
+      const scpId = response[11];
+      if (scpId === 0x02) version = 'scp02';
+      else if (scpId === 0x03) version = 'scp03';
+      else throw new Error('Unknown SCP identifier 0x' + ('0'+scpId.toString(16)).slice(-2).toUpperCase() +
+        ' at response byte 11; select protocol manually');
+    }
+
+    let html;
+    if (version === 'scp02') {
+      if (encKey.length !== 16) throw new Error('SCP02 ENC key must be 16 bytes');
+      if (macKey.length !== 16) throw new Error('SCP02 MAC key must be 16 bytes');
+      if (dekKey.length && dekKey.length !== 16) throw new Error('SCP02 DEK key must be 16 bytes');
+      const iParam = parseInt(document.getElementById('iParam').value.trim(), 16);
+      if (isNaN(iParam)) throw new Error('Invalid i parameter');
+      html = computeScp02(encKey, macKey, dekKey, hostChallenge, response, secLevel, iParam);
+    } else {
+      if (![16, 24, 32].includes(encKey.length)) throw new Error('SCP03 ENC key must be 16, 24, or 32 bytes');
+      if (macKey.length !== encKey.length) throw new Error('SCP03 MAC key must match ENC key length');
+      html = computeScp03(encKey, macKey, dekKey, hostChallenge, response, secLevel);
+    }
+
+    const el = document.getElementById('output');
+    el.innerHTML = html;
+    el.style.display = 'block';
+    setStatus('OK', true);
+  } catch (e) {
+    setStatus(e.message, false);
+  }
+}
+
+// ===========================================================================
+// Self-test
+// ===========================================================================
+
+function selfTest() {
+  try {
+    const key16 = parseHex('404142434445464748494A4B4C4D4E4F');
+
+    // 3DES-ECB
+    const tdesResult = tdesEcb(key16, parseHex('0182003300000000'));
+    assert(toHex(tdesResult), '6308625CFC059018', '3DES-ECB');
+
+    // 3DES-CBC
+    const cbcResult = tdesCbc(key16, zeros(8), parseHex('01820033000000000000000000000000'));
+    assert(toHex(cbcResult), '6308625CFC059018DE2C90431C94E48D', '3DES-CBC');
+
+    // AES-ECB
+    const aesResult = aesEncryptBlock(key16, parseHex('00000000000000000000000400008001'));
+    assert(toHex(aesResult), '1210FC3D13A3074ACD5938AFF4E12D52', 'AES-ECB');
+
+    // AES-CMAC
+    const cmacResult = aesCmac(key16,
+      parseHex('00000000000000000000000400008001A0A1A2A3A4A5A6A760B0B1B2B3B4B5B6'));
+    assert(toHex(cmacResult), '043CC9E4AF0D64E9316C299A35F88653', 'AES-CMAC');
+
+    // Cross-check: SCP02 session key derivation matches Python output
+    const scp02Enc = tdesCbc(key16, zeros(8),
+      [0x01, 0x82, 0x00, 0x33].concat(zeros(12)));
+    assert(toHex(scp02Enc), '6308625CFC059018DE2C90431C94E48D', 'SCP02 S-ENC derivation');
+
+    // Cross-check: SCP03 S-ENC derivation matches Python output
+    const context = parseHex('A0A1A2A3A4A5A6A760B0B1B2B3B4B5B6');
+    const scp03Enc = scp03Kdf(key16, 0x04, context, 128);
+    assert(toHex(scp03Enc), '043CC9E4AF0D64E9316C299A35F88653', 'SCP03 S-ENC KDF');
+
+    setStatus('All self-tests passed', true);
+  } catch (e) {
+    setStatus('Self-test FAILED: ' + e.message, false);
+  }
+}
+
+function assert(actual, expected, label) {
+  if (actual !== expected)
+    throw new Error(label + ': expected ' + expected + ', got ' + actual);
+}
+
+// Init
+toggleScp();
+</script>
+</body>
+</html>
