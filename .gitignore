@@ -8,3 +8,7 @@ wheels/
 
 # Virtual environments
 .venv
+
+# Proprietary card protocols
+src/gpexp/core/loaderv3/
+src/gpexp/app/loaderv3/
