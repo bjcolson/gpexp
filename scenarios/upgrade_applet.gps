@@ -1,8 +1,18 @@
 # upgrade_applet.gps — test ELF upgrade with HelloWorldApplet
 #
+# *** NEEDS TESTING — HelloWorldApplet_upgrade.cap has not been verified
+# *** on a card that supports Amendment H.  The upgrade CAP imports
+# *** A00000015107 (org.globalplatform.upgrading) which is not present
+# *** on all cards (cards without it will fail LOAD with 6400).
+#
 # Installs the applet fresh, increments the counter a few times,
 # then performs an ELF upgrade with the same CAP file. If Amendment H
 # is supported, the counter value survives the upgrade.
+#
+# Uses HelloWorldApplet_upgrade.cap which includes the GP upgrade API
+# import (A00000015107) required for OnUpgradeListener callbacks.
+# The base HelloWorldApplet.cap (without upgrade support) is used for
+# load_applet.gps.
 
 probe
 auth
@@ -14,7 +24,7 @@ delete aid=D000CAFE0001
 set stop_on_error=true
 
 # --- initial load and install ---
-load file=data/HelloWorldApplet.cap
+load file=data/HelloWorldApplet_upgrade.cap
 install package=D000CAFE0001 module=D000CAFE000101
 
 # --- exercise the applet: increment counter 3 times ---
@@ -30,7 +40,7 @@ apdu apdu=0002000002
 reconnect
 probe
 auth
-upgrade file=data/HelloWorldApplet.cap
+upgrade file=data/HelloWorldApplet_upgrade.cap
 # resume triggers restore phase (Amendment H B.1 sequence)
 upgrade_resume
 
